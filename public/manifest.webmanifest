@@ -1,0 +1,16 @@
+{
+  "name": "SiteProof",
+  "short_name": "SiteProof",
+  "description": "Bewijs dat je website toegankelijk is",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#14b8a6",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

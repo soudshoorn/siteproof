@@ -1,0 +1,287 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ───────────────────────────────────────────────
+
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum PlanType {
+  FREE
+  STARTER
+  PROFESSIONAL
+  BUREAU
+}
+
+enum ScanStatus {
+  QUEUED
+  CRAWLING
+  SCANNING
+  ANALYZING
+  COMPLETED
+  FAILED
+}
+
+enum IssueSeverity {
+  CRITICAL
+  SERIOUS
+  MODERATE
+  MINOR
+}
+
+enum IssueImpact {
+  CRITICAL
+  SERIOUS
+  MODERATE
+  MINOR
+}
+
+enum ScheduleFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+enum PostStatus {
+  DRAFT
+  PUBLISHED
+  SCHEDULED
+}
+
+// ─── Models ──────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(uuid())
+  supabaseId String  @unique
+  email     String   @unique
+  fullName  String?
+  avatarUrl String?
+  isAdmin   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships  OrganizationMember[]
+  scansStarted Scan[]
+  blogPosts    BlogPost[]
+}
+
+model Organization {
+  id                     String   @id @default(uuid())
+  name                   String
+  slug                   String   @unique
+  planType               PlanType @default(FREE)
+  mollieCustomerId       String?  @unique
+  mollieSubscriptionId   String?  @unique
+  molliePlanId           String?
+  mollieCurrentPeriodEnd DateTime?
+  maxWebsites            Int      @default(1)
+  maxPagesPerScan        Int      @default(5)
+  // White-label branding
+  customLogoUrl          String?
+  customPrimaryColor     String?  @default("#0D9488")
+  customDomain           String?  @unique
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  members           OrganizationMember[]
+  websites          Website[]
+  notes             CustomerNote[]
+  notificationPrefs NotificationPreference?
+  apiKeys           ApiKey[]
+}
+
+model OrganizationMember {
+  id             String   @id @default(uuid())
+  role           Role     @default(MEMBER)
+  userId         String
+  organizationId String
+  createdAt      DateTime @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+}
+
+model Website {
+  id             String   @id @default(uuid())
+  url            String
+  name           String
+  organizationId String
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  scans        Scan[]
+  schedules    ScanSchedule[]
+
+  @@unique([url, organizationId])
+}
+
+model Scan {
+  id             String     @id @default(uuid())
+  websiteId      String
+  startedById    String?
+  status         ScanStatus @default(QUEUED)
+  score          Float?
+  totalPages     Int        @default(0)
+  scannedPages   Int        @default(0)
+  totalIssues    Int        @default(0)
+  criticalIssues Int        @default(0)
+  seriousIssues  Int        @default(0)
+  moderateIssues Int        @default(0)
+  minorIssues    Int        @default(0)
+  duration       Int?
+  errorMessage   String?
+  metadata       Json?
+  createdAt      DateTime   @default(now())
+  completedAt    DateTime?
+
+  website   Website      @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  startedBy User?        @relation(fields: [startedById], references: [id])
+  pages     PageResult[]
+  issues    Issue[]
+}
+
+model PageResult {
+  id            String   @id @default(uuid())
+  scanId        String
+  url           String
+  title         String?
+  score         Float?
+  issueCount    Int      @default(0)
+  screenshotUrl String?
+  loadTime      Int?
+  createdAt     DateTime @default(now())
+
+  scan   Scan    @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  issues Issue[]
+
+  @@index([scanId])
+}
+
+model Issue {
+  id            String        @id @default(uuid())
+  scanId        String
+  pageResultId  String?
+  axeRuleId     String
+  severity      IssueSeverity
+  impact        IssueImpact
+  wcagCriteria  String[]
+  wcagLevel     String?
+  description   String
+  helpText      String
+  fixSuggestion String
+  htmlElement   String?
+  cssSelector   String?
+  pageUrl       String
+  createdAt     DateTime      @default(now())
+
+  scan       Scan        @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  pageResult PageResult? @relation(fields: [pageResultId], references: [id], onDelete: Cascade)
+
+  @@index([scanId])
+  @@index([axeRuleId])
+}
+
+model ScanSchedule {
+  id        String            @id @default(uuid())
+  websiteId String            @unique
+  frequency ScheduleFrequency @default(WEEKLY)
+  isActive  Boolean           @default(true)
+  lastRunAt DateTime?
+  nextRunAt DateTime?
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+}
+
+model BlogPost {
+  id              String     @id @default(uuid())
+  title           String
+  slug            String     @unique
+  excerpt         String?
+  content         String
+  featuredImage   String?
+  metaDescription String?
+  category        String?
+  tags            String[]
+  status          PostStatus @default(DRAFT)
+  publishedAt     DateTime?
+  viewCount       Int        @default(0)
+  authorId        String
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  author User @relation(fields: [authorId], references: [id])
+
+  @@index([slug])
+  @@index([status, publishedAt])
+}
+
+model SeoPage {
+  id              String   @id @default(uuid())
+  slug            String   @unique
+  title           String
+  metaDescription String?
+  content         String
+  updatedAt       DateTime @updatedAt
+}
+
+model CustomerNote {
+  id             String   @id @default(uuid())
+  organizationId String
+  content        String
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+model NotificationPreference {
+  id                 String  @id @default(uuid())
+  organizationId     String  @unique
+  scanCompleted      Boolean @default(true)
+  scoreDropAlert     Boolean @default(true)
+  criticalIssueAlert Boolean @default(true)
+  weeklyReport       Boolean @default(true)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+model ApiKey {
+  id             String    @id @default(uuid())
+  organizationId String
+  name           String
+  keyPrefix      String    // First 8 chars of the key for display (e.g. "sp_live_a1b2")
+  keyHash        String    @unique // SHA-256 hash of the full key
+  lastUsedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  revokedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([keyHash])
+}
+
+model QuickScan {
+  id        String   @id @default(uuid())
+  url       String
+  score     Float?
+  status    ScanStatus @default(QUEUED)
+  results   Json?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@index([ipAddress, createdAt])
+}
