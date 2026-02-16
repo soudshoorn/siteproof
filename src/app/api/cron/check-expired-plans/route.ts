@@ -56,12 +56,12 @@ export async function GET(request: Request) {
       const owner = org.members[0]?.user;
       if (owner) {
         const content = `
-          <h1 style="color: #f5f5f5; font-size: 22px; font-weight: 700; margin: 0 0 8px;">Plan gewijzigd naar Gratis</h1>
-          <p style="color: #a3a3a3; font-size: 15px; margin: 0 0 24px; line-height: 1.6;">
-            Je <strong style="color: #f5f5f5;">${previousPlan}</strong> abonnement voor <strong style="color: #f5f5f5;">${org.name}</strong> is verlopen.
+          <h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0f172a;">Plan gewijzigd naar Gratis</h2>
+          <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#475569;">
+            Je <strong style="color:#0f172a;">${previousPlan}</strong> abonnement voor <strong style="color:#0f172a;">${org.name}</strong> is verlopen.
             Je account is automatisch overgezet naar het gratis plan.
           </p>
-          <p style="color: #a3a3a3; font-size: 14px; margin: 0 0 24px; line-height: 1.6;">
+          <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:#475569;">
             Je scan-data is bewaard. Wil je weer upgraden? Je kunt op elk moment een nieuw abonnement starten.
           </p>
           ${emailButton("Opnieuw upgraden", `${APP_URL}/pricing`)}

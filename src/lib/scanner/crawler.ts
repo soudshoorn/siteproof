@@ -1,7 +1,7 @@
 import type { Browser, Page } from "puppeteer";
 
 const USER_AGENT = "SiteProof/1.0 (Accessibility Scanner)";
-const PAGE_TIMEOUT = 30_000;
+const PAGE_TIMEOUT = 15_000; // 15s for crawling (just link discovery)
 const MAX_REDIRECTS = 5;
 
 export interface CrawlResult {
@@ -21,7 +21,7 @@ interface RobotsTxtRules {
 
 /**
  * Crawl a website starting from the given URL.
- * Discovers pages via sitemap.xml and internal links (BFS).
+ * Discovers pages via sitemap.xml (fast, via fetch) and internal links (BFS with Puppeteer).
  * Respects robots.txt and maxPages limit.
  */
 export async function crawlWebsite(
@@ -41,11 +41,11 @@ export async function crawlWebsite(
   discovered.add(normalizedStart);
   queue.push(normalizedStart);
 
-  // Parse robots.txt
-  const robotsRules = await fetchRobotsTxt(browser, origin);
+  // Parse robots.txt (fast, via fetch)
+  const robotsRules = await fetchRobotsTxt(origin);
 
-  // Discover URLs from sitemap.xml
-  const sitemapUrls = await discoverFromSitemap(browser, origin, robotsRules.sitemapUrls);
+  // Discover URLs from sitemap.xml (fast, via fetch — no Puppeteer needed)
+  const sitemapUrls = await discoverFromSitemap(origin, robotsRules.sitemapUrls);
   for (const url of sitemapUrls) {
     const normalized = normalizeUrl(url);
     if (
@@ -58,20 +58,31 @@ export async function crawlWebsite(
     }
   }
 
-  // BFS crawl for internal links
+  onProgress?.(0, queue.length);
+
+  // If sitemap gave us enough URLs, skip BFS crawling entirely
+  if (queue.length >= maxPages) {
+    return { urls: queue.slice(0, maxPages), errors };
+  }
+
+  // BFS crawl for internal links (only needed if sitemap didn't have enough)
   const result: string[] = [];
   let index = 0;
+  // Limit BFS crawling to avoid spending minutes on link discovery
+  const maxBfsCrawls = Math.min(maxPages, 20);
+  let bfsCrawlCount = 0;
 
   while (index < queue.length && result.length < maxPages) {
     const url = queue[index++];
     result.push(url);
 
-    onProgress?.(result.length, queue.length);
+    onProgress?.(result.length, Math.max(queue.length, result.length));
 
-    // Don't crawl for more links if we already have enough URLs queued
-    if (queue.length >= maxPages * 2) continue;
+    // Don't crawl for more links if we already have enough or hit BFS limit
+    if (queue.length >= maxPages * 2 || bfsCrawlCount >= maxBfsCrawls) continue;
 
     try {
+      bfsCrawlCount++;
       const links = await extractLinks(browser, url, origin);
 
       for (const link of links) {
@@ -97,25 +108,22 @@ export async function crawlWebsite(
 }
 
 /**
- * Fetch and parse robots.txt for disallowed paths and sitemap URLs.
+ * Fetch and parse robots.txt using native fetch (fast, no Puppeteer).
  */
-async function fetchRobotsTxt(
-  browser: Browser,
-  origin: string
-): Promise<RobotsTxtRules> {
+async function fetchRobotsTxt(origin: string): Promise<RobotsTxtRules> {
   const rules: RobotsTxtRules = { disallowed: [], sitemapUrls: [] };
 
-  let page: Page | null = null;
   try {
-    page = await browser.newPage();
-    await page.setUserAgent(USER_AGENT);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5_000);
 
-    const response = await page.goto(`${origin}/robots.txt`, {
-      waitUntil: "networkidle2",
-      timeout: 10_000,
+    const response = await fetch(`${origin}/robots.txt`, {
+      headers: { "User-Agent": USER_AGENT },
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
 
-    if (!response || response.status() !== 200) return rules;
+    if (!response.ok) return rules;
 
     const text = await response.text();
     let isRelevantAgent = false;
@@ -143,18 +151,15 @@ async function fetchRobotsTxt(
     }
   } catch {
     // robots.txt not available — allow everything
-  } finally {
-    if (page) await page.close();
   }
 
   return rules;
 }
 
 /**
- * Discover URLs from sitemap.xml (supports sitemap index files).
+ * Discover URLs from sitemap.xml using native fetch (much faster than Puppeteer).
  */
 async function discoverFromSitemap(
-  browser: Browser,
   origin: string,
   knownSitemapUrls: string[]
 ): Promise<string[]> {
@@ -167,14 +172,13 @@ async function discoverFromSitemap(
   const processed = new Set<string>();
 
   for (const sitemapUrl of sitemapUrls) {
-    await parseSitemap(browser, sitemapUrl, urls, processed);
+    await parseSitemap(sitemapUrl, urls, processed);
   }
 
   return urls;
 }
 
 async function parseSitemap(
-  browser: Browser,
   sitemapUrl: string,
   urls: string[],
   processed: Set<string>,
@@ -183,19 +187,19 @@ async function parseSitemap(
   if (depth > 3 || processed.has(sitemapUrl)) return;
   processed.add(sitemapUrl);
 
-  let page: Page | null = null;
   try {
-    page = await browser.newPage();
-    await page.setUserAgent(USER_AGENT);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10_000);
 
-    const response = await page.goto(sitemapUrl, {
-      waitUntil: "networkidle2",
-      timeout: 10_000,
+    const response = await fetch(sitemapUrl, {
+      headers: { "User-Agent": USER_AGENT },
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
 
-    if (!response || response.status() !== 200) return;
+    if (!response.ok) return;
 
-    const contentType = response.headers()["content-type"] ?? "";
+    const contentType = response.headers.get("content-type") ?? "";
     if (
       !contentType.includes("xml") &&
       !contentType.includes("text/plain") &&
@@ -212,7 +216,7 @@ async function parseSitemap(
       for (const match of sitemapIndexMatches) {
         const locMatch = match.match(/<loc>([^<]+)<\/loc>/i);
         if (locMatch?.[1]) {
-          await parseSitemap(browser, locMatch[1].trim(), urls, processed, depth + 1);
+          await parseSitemap(locMatch[1].trim(), urls, processed, depth + 1);
         }
       }
     }
@@ -229,8 +233,6 @@ async function parseSitemap(
     }
   } catch {
     // Sitemap not available or malformed
-  } finally {
-    if (page) await page.close();
   }
 }
 
@@ -248,6 +250,17 @@ async function extractLinks(
     await page.setUserAgent(USER_AGENT);
     await page.setViewport({ width: 1280, height: 720 });
 
+    // Block heavy resources during link discovery
+    await page.setRequestInterception(true);
+    page.on("request", (request) => {
+      const type = request.resourceType();
+      if (["image", "font", "media", "stylesheet"].includes(type)) {
+        request.abort();
+      } else {
+        request.continue();
+      }
+    });
+
     let redirectCount = 0;
     page.on("response", (response) => {
       const status = response.status();
@@ -257,7 +270,7 @@ async function extractLinks(
     });
 
     await page.goto(url, {
-      waitUntil: "networkidle2",
+      waitUntil: "domcontentloaded", // Faster than networkidle2 for link discovery
       timeout: PAGE_TIMEOUT,
     });
 
@@ -272,7 +285,6 @@ async function extractLinks(
         .map((a) => {
           try {
             const href = (a as HTMLAnchorElement).href;
-            // Return only absolute URLs from the same origin
             if (href.startsWith(pageOrigin)) return href;
             return null;
           } catch {
@@ -298,11 +310,8 @@ async function extractLinks(
 function normalizeUrl(url: string): string {
   try {
     const parsed = new URL(url);
-    // Remove hash
     parsed.hash = "";
-    // Sort query params for consistency
     parsed.searchParams.sort();
-    // Remove trailing slash (except for root)
     let pathname = parsed.pathname;
     if (pathname.length > 1 && pathname.endsWith("/")) {
       pathname = pathname.slice(0, -1);
@@ -319,10 +328,8 @@ function normalizeUrl(url: string): string {
  */
 function isInternalHtmlUrl(url: string, origin: string): boolean {
   try {
-    const parsed = new URL(url);
     if (!url.startsWith(origin)) return false;
 
-    // Skip non-HTML resources
     const skipExtensions = [
       ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".ico",
       ".mp3", ".mp4", ".avi", ".mov", ".wmv", ".flv", ".webm",
@@ -332,6 +339,7 @@ function isInternalHtmlUrl(url: string, origin: string): boolean {
       ".woff", ".woff2", ".ttf", ".eot",
     ];
 
+    const parsed = new URL(url);
     const pathname = parsed.pathname.toLowerCase();
     return !skipExtensions.some((ext) => pathname.endsWith(ext));
   } catch {
@@ -344,7 +352,7 @@ function isInternalHtmlUrl(url: string, origin: string): boolean {
  */
 function isDisallowedByRobots(
   url: string,
-  origin: string,
+  _origin: string,
   rules: RobotsTxtRules
 ): boolean {
   try {

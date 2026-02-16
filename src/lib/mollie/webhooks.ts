@@ -119,12 +119,12 @@ export async function handleFailedPayment(metadata: {
     : "binnenkort";
 
   const content = `
-    <h1 style="color: #f5f5f5; font-size: 22px; font-weight: 700; margin: 0 0 8px;">Betaling mislukt</h1>
-    <p style="color: #a3a3a3; font-size: 15px; margin: 0 0 24px; line-height: 1.6;">
-      De automatische betaling voor je <strong style="color: #f5f5f5;">${org.planType}</strong> abonnement is mislukt.
-      Je plan blijft actief tot <strong style="color: #f5f5f5;">${periodEnd}</strong>.
+    <h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0f172a;">Betaling mislukt</h2>
+    <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#475569;">
+      De automatische betaling voor je <strong style="color:#0f172a;">${org.planType}</strong> abonnement is mislukt.
+      Je plan blijft actief tot <strong style="color:#0f172a;">${periodEnd}</strong>.
     </p>
-    <p style="color: #a3a3a3; font-size: 14px; margin: 0 0 24px; line-height: 1.6;">
+    <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:#475569;">
       Controleer of je betaalmethode nog geldig is en probeer het opnieuw via je facturatie-instellingen.
       Als de betaling niet lukt, wordt je account na de huidige periode overgezet naar het gratis plan.
     </p>
@@ -209,22 +209,22 @@ async function sendSubscriptionEmail(
 
   for (const member of members) {
     const content = `
-      <h1 style="color: #f5f5f5; font-size: 22px; font-weight: 700; margin: 0 0 8px;">Abonnement bevestigd</h1>
-      <p style="color: #a3a3a3; font-size: 15px; margin: 0 0 24px; line-height: 1.6;">
-        Bedankt${member.user.fullName ? `, ${member.user.fullName}` : ""}! Je bent geüpgraded naar het <strong style="color: #14B8A6;">${planName}</strong> plan.
+      <h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0f172a;">Abonnement bevestigd</h2>
+      <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#475569;">
+        Bedankt${member.user.fullName ? `, ${member.user.fullName}` : ""}! Je bent geüpgraded naar het <strong style="color:#0d9488;">${planName}</strong> plan.
       </p>
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #1a1a1a; border-radius: 8px; margin-bottom: 24px;">
-        <tr><td style="padding: 16px 24px; border-bottom: 1px solid #2a2a2a;">
-          <p style="color: #a3a3a3; font-size: 12px; margin: 0 0 4px;">Plan</p>
-          <p style="color: #f5f5f5; font-size: 16px; font-weight: 600; margin: 0;">${planName}</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:24px;">
+        <tr><td style="padding:16px 24px;border-bottom:1px solid #e2e8f0;">
+          <p style="margin:0 0 4px;font-size:12px;color:#94a3b8;">Plan</p>
+          <p style="margin:0;font-size:16px;font-weight:600;color:#0f172a;">${planName}</p>
         </td></tr>
-        <tr><td style="padding: 16px 24px; border-bottom: 1px solid #2a2a2a;">
-          <p style="color: #a3a3a3; font-size: 12px; margin: 0 0 4px;">Prijs</p>
-          <p style="color: #f5f5f5; font-size: 16px; font-weight: 600; margin: 0;">€${price} (${intervalLabel})</p>
+        <tr><td style="padding:16px 24px;border-bottom:1px solid #e2e8f0;">
+          <p style="margin:0 0 4px;font-size:12px;color:#94a3b8;">Prijs</p>
+          <p style="margin:0;font-size:16px;font-weight:600;color:#0f172a;">€${price} (${intervalLabel})</p>
         </td></tr>
-        <tr><td style="padding: 16px 24px;">
-          <p style="color: #a3a3a3; font-size: 12px; margin: 0 0 4px;">Volgende factuurdatum</p>
-          <p style="color: #f5f5f5; font-size: 16px; font-weight: 600; margin: 0;">${nextDate}</p>
+        <tr><td style="padding:16px 24px;">
+          <p style="margin:0 0 4px;font-size:12px;color:#94a3b8;">Volgende factuurdatum</p>
+          <p style="margin:0;font-size:16px;font-weight:600;color:#0f172a;">${nextDate}</p>
         </td></tr>
       </table>
       ${emailButton("Ga naar je dashboard", `${APP_URL}/dashboard`)}

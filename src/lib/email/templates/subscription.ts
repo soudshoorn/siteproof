@@ -14,36 +14,36 @@ export function subscriptionConfirmEmail(
   data: SubscriptionConfirmEmailData
 ): { subject: string; html: string } {
   const content = `
-    <h1 style="color: #f5f5f5; font-size: 22px; font-weight: 700; margin: 0 0 8px;">Abonnement bevestigd</h1>
-    <p style="color: #a3a3a3; font-size: 15px; margin: 0 0 24px; line-height: 1.6;">
-      Bedankt${data.userName ? `, ${data.userName}` : ""}! Je bent geüpgraded naar het <strong style="color: #14B8A6;">${data.planName}</strong> plan.
+    <h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0f172a;">Abonnement bevestigd</h2>
+    <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#475569;">
+      Bedankt${data.userName ? `, ${data.userName}` : ""}! Je bent geüpgraded naar het <strong style="color:#0d9488;">${data.planName}</strong> plan.
     </p>
 
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #1a1a1a; border-radius: 8px; margin-bottom: 24px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:24px;">
       <tr>
-        <td style="padding: 20px 24px; border-bottom: 1px solid #2a2a2a;">
-          <p style="color: #a3a3a3; font-size: 12px; margin: 0 0 4px;">Plan</p>
-          <p style="color: #f5f5f5; font-size: 16px; font-weight: 600; margin: 0;">${data.planName}</p>
+        <td style="padding:20px 24px;border-bottom:1px solid #e2e8f0;">
+          <p style="margin:0 0 4px;font-size:12px;color:#94a3b8;">Plan</p>
+          <p style="margin:0;font-size:16px;font-weight:600;color:#0f172a;">${data.planName}</p>
         </td>
       </tr>
       <tr>
-        <td style="padding: 20px 24px; border-bottom: 1px solid #2a2a2a;">
-          <p style="color: #a3a3a3; font-size: 12px; margin: 0 0 4px;">Prijs</p>
-          <p style="color: #f5f5f5; font-size: 16px; font-weight: 600; margin: 0;">${data.price} (${data.interval})</p>
+        <td style="padding:20px 24px;border-bottom:1px solid #e2e8f0;">
+          <p style="margin:0 0 4px;font-size:12px;color:#94a3b8;">Prijs</p>
+          <p style="margin:0;font-size:16px;font-weight:600;color:#0f172a;">${data.price} (${data.interval})</p>
         </td>
       </tr>
       <tr>
-        <td style="padding: 20px 24px;">
-          <p style="color: #a3a3a3; font-size: 12px; margin: 0 0 4px;">Volgende factuurdatum</p>
-          <p style="color: #f5f5f5; font-size: 16px; font-weight: 600; margin: 0;">${data.nextBillingDate}</p>
+        <td style="padding:20px 24px;">
+          <p style="margin:0 0 4px;font-size:12px;color:#94a3b8;">Volgende factuurdatum</p>
+          <p style="margin:0;font-size:16px;font-weight:600;color:#0f172a;">${data.nextBillingDate}</p>
         </td>
       </tr>
     </table>
 
     ${emailButton("Ga naar je dashboard", `${APP_URL}/dashboard`)}
 
-    <p style="color: #666; font-size: 13px; margin: 0; line-height: 1.6;">
-      Je kunt je abonnement beheren via <a href="${APP_URL}/dashboard/settings/billing" style="color: #14B8A6; text-decoration: none;">je facturatie-instellingen</a>.
+    <p style="margin:0;font-size:13px;line-height:1.6;color:#94a3b8;">
+      Je kunt je abonnement beheren via <a href="${APP_URL}/dashboard/settings/billing" style="color:#0d9488;text-decoration:none;">je facturatie-instellingen</a>.
     </p>
   `;
 
@@ -67,22 +67,22 @@ export function subscriptionCancelledEmail(
   data: SubscriptionCancelledEmailData
 ): { subject: string; html: string } {
   const content = `
-    <h1 style="color: #f5f5f5; font-size: 22px; font-weight: 700; margin: 0 0 8px;">Abonnement opgezegd</h1>
-    <p style="color: #a3a3a3; font-size: 15px; margin: 0 0 24px; line-height: 1.6;">
-      Je <strong style="color: #f5f5f5;">${data.planName}</strong> abonnement is opgezegd. Je kunt alle features blijven gebruiken tot <strong style="color: #f5f5f5;">${data.activeUntil}</strong>.
+    <h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0f172a;">Abonnement opgezegd</h2>
+    <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#475569;">
+      Je <strong style="color:#0f172a;">${data.planName}</strong> abonnement is opgezegd. Je kunt alle features blijven gebruiken tot <strong style="color:#0f172a;">${data.activeUntil}</strong>.
     </p>
 
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #1a1a1a; border-radius: 8px; margin-bottom: 24px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:24px;">
       <tr>
-        <td style="padding: 20px 24px;">
-          <p style="color: #a3a3a3; font-size: 14px; margin: 0; line-height: 1.6;">
-            Na <strong style="color: #f5f5f5;">${data.activeUntil}</strong> wordt je account automatisch overgezet naar het gratis plan. Je scan-data blijft behouden.
+        <td style="padding:20px 24px;">
+          <p style="margin:0;font-size:14px;line-height:1.6;color:#475569;">
+            Na <strong style="color:#0f172a;">${data.activeUntil}</strong> wordt je account automatisch overgezet naar het gratis plan. Je scan-data blijft behouden.
           </p>
         </td>
       </tr>
     </table>
 
-    <p style="color: #a3a3a3; font-size: 14px; margin: 0 0 16px; line-height: 1.6;">
+    <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#475569;">
       Bedenk je je? Je kunt je abonnement op elk moment opnieuw activeren.
     </p>
 

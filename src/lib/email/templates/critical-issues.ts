@@ -26,12 +26,12 @@ export function criticalIssuesEmail(data: CriticalIssuesEmailData): {
     .map(
       (issue) => `
       <tr>
-        <td style="padding: 12px 16px; border-bottom: 1px solid #2a2a2a;">
-          <p style="color: #f5f5f5; font-size: 14px; font-weight: 600; margin: 0 0 4px;">
+        <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;">
+          <p style="margin:0 0 4px;font-size:14px;font-weight:600;color:#0f172a;">
             ${issue.description}
           </p>
-          <p style="color: #666; font-size: 12px; margin: 0;">
-            ${issue.wcagCriteria.map((c) => `WCAG ${c}`).join(", ")} · <a href="${issue.pageUrl}" style="color: #14B8A6; text-decoration: none;">${truncateUrl(issue.pageUrl)}</a>
+          <p style="margin:0;font-size:12px;color:#94a3b8;">
+            ${issue.wcagCriteria.map((c) => `WCAG ${c}`).join(", ")} · <a href="${issue.pageUrl}" style="color:#0d9488;text-decoration:none;">${truncateUrl(issue.pageUrl)}</a>
           </p>
         </td>
       </tr>`
@@ -39,20 +39,20 @@ export function criticalIssuesEmail(data: CriticalIssuesEmailData): {
     .join("");
 
   const content = `
-    <h1 style="color: #f5f5f5; font-size: 22px; font-weight: 700; margin: 0 0 8px;">Nieuwe kritieke issues</h1>
-    <p style="color: #a3a3a3; font-size: 15px; margin: 0 0 24px; line-height: 1.6;">
-      Er zijn <strong style="color: #ef4444;">${data.criticalCount} nieuwe kritieke toegankelijkheidsproblemen</strong> gevonden op <strong style="color: #f5f5f5;">${data.websiteName}</strong>.
+    <h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0f172a;">Nieuwe kritieke issues</h2>
+    <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#475569;">
+      Er zijn <strong style="color:#dc2626;">${data.criticalCount} nieuwe kritieke toegankelijkheidsproblemen</strong> gevonden op <strong style="color:#0f172a;">${data.websiteName}</strong>.
     </p>
 
-    <p style="color: #a3a3a3; font-size: 14px; margin: 0 0 16px; line-height: 1.6;">
+    <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#475569;">
       Kritieke issues verhinderen dat bepaalde gebruikers je website kunnen gebruiken. Los deze zo snel mogelijk op.
     </p>
 
     <!-- Issues list -->
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #1a1a1a; border-radius: 8px; margin-bottom: 8px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:8px;">
       <tr>
-        <td style="padding: 12px 16px; border-bottom: 1px solid #2a2a2a;">
-          <p style="color: #ef4444; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin: 0;">
+        <td style="padding:12px 16px;border-bottom:1px solid #e2e8f0;">
+          <p style="margin:0;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#dc2626;">
             Kritieke issues
           </p>
         </td>
@@ -62,7 +62,7 @@ export function criticalIssuesEmail(data: CriticalIssuesEmailData): {
 
     ${
       data.criticalCount > 5
-        ? `<p style="color: #666; font-size: 13px; margin: 0 0 16px;">
+        ? `<p style="margin:0 0 16px;font-size:13px;color:#94a3b8;">
         En ${data.criticalCount - 5} meer. Bekijk alle issues in het dashboard.
       </p>`
         : ""
@@ -72,7 +72,7 @@ export function criticalIssuesEmail(data: CriticalIssuesEmailData): {
   `;
 
   return {
-    subject: `🚨 ${data.criticalCount} kritieke issues op ${data.websiteName}`,
+    subject: `${data.criticalCount} kritieke issues op ${data.websiteName}`,
     html: baseEmailLayout({
       title: `Kritieke issues — ${data.websiteName}`,
       preheader: `${data.criticalCount} nieuwe kritieke toegankelijkheidsproblemen gevonden op ${data.websiteName}. Directe actie vereist.`,

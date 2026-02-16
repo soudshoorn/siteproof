@@ -37,6 +37,9 @@ async function getBrowser(): Promise<Browser> {
   return browser;
 }
 
+/** How many pages to analyze simultaneously */
+const CONCURRENCY = 3;
+
 /**
  * Process a scan job: crawl the website, analyze each page, save results.
  */
@@ -60,13 +63,11 @@ async function processScanJob(data: ScanJobData): Promise<void> {
       activeBrowser,
       url,
       maxPages,
-      async (scanned, total) => {
+      async (_scanned, total) => {
         await prisma.scan.update({
           where: { id: scanId },
           data: { totalPages: total, scannedPages: 0 },
-        }).catch(() => {
-          // Non-critical update, ignore errors
-        });
+        }).catch(() => {});
       }
     );
 
@@ -86,7 +87,7 @@ async function processScanJob(data: ScanJobData): Promise<void> {
       },
     });
 
-    // Phase 2: Analyze each page
+    // Phase 2: Analyze pages concurrently (batches of CONCURRENCY)
     const pageResults: Array<{
       url: string;
       title: string | null;
@@ -100,89 +101,123 @@ async function processScanJob(data: ScanJobData): Promise<void> {
     let totalModerate = 0;
     let totalMinor = 0;
     let totalIssues = 0;
+    let pagesCompleted = 0;
+    let failedPages = 0;
 
-    for (let i = 0; i < pagesToScan.length; i++) {
-      const pageUrl = pagesToScan[i];
-      console.log(`[Scanner] Analyzing page ${i + 1}/${pagesToScan.length}: ${pageUrl}`);
+    // Process pages in concurrent batches
+    for (let i = 0; i < pagesToScan.length; i += CONCURRENCY) {
+      const batch = pagesToScan.slice(i, i + CONCURRENCY);
 
-      try {
-        const analysis = await analyzePage(activeBrowser, pageUrl);
+      const results = await Promise.allSettled(
+        batch.map(async (pageUrl) => {
+          console.log(`[Scanner] Analyzing: ${pageUrl}`);
 
-        // Save PageResult
-        const pageResult = await prisma.pageResult.create({
-          data: {
-            scanId,
+          try {
+            const analysis = await analyzePage(activeBrowser, pageUrl);
+
+            // Save PageResult
+            const pageResult = await prisma.pageResult.create({
+              data: {
+                scanId,
+                url: analysis.url,
+                title: analysis.title,
+                score: analysis.score,
+                issueCount: analysis.issues.length,
+                loadTime: analysis.loadTime,
+              },
+            });
+
+            // Save issues in batches
+            if (analysis.issues.length > 0) {
+              await prisma.issue.createMany({
+                data: analysis.issues.map((issue) => ({
+                  scanId,
+                  pageResultId: pageResult.id,
+                  axeRuleId: issue.axeRuleId,
+                  severity: issue.severity,
+                  impact: issue.impact,
+                  wcagCriteria: issue.wcagCriteria,
+                  wcagLevel: issue.wcagLevel,
+                  description: issue.description,
+                  helpText: issue.helpText,
+                  fixSuggestion: issue.fixSuggestion,
+                  htmlElement: issue.htmlElement,
+                  cssSelector: issue.cssSelector,
+                  pageUrl: issue.pageUrl,
+                })),
+              });
+            }
+
+            return analysis;
+          } catch (error) {
+            if (error instanceof PageAnalysisError) {
+              console.warn(`[Scanner] Page failed: ${pageUrl}: ${error.message}`);
+
+              // Save a PageResult with no score to indicate failure
+              await prisma.pageResult.create({
+                data: {
+                  scanId,
+                  url: pageUrl,
+                  title: null,
+                  score: null,
+                  issueCount: 0,
+                  loadTime: error.loadTime,
+                },
+              });
+            } else {
+              console.error(`[Scanner] Unexpected error for ${pageUrl}:`, error);
+
+              // Still save a failed page result
+              await prisma.pageResult.create({
+                data: {
+                  scanId,
+                  url: pageUrl,
+                  title: null,
+                  score: null,
+                  issueCount: 0,
+                  loadTime: null,
+                },
+              }).catch(() => {});
+            }
+
+            return null; // Mark as failed
+          }
+        })
+      );
+
+      // Process results from this batch
+      for (const result of results) {
+        pagesCompleted++;
+
+        if (result.status === "fulfilled" && result.value) {
+          const analysis = result.value;
+
+          for (const issue of analysis.issues) {
+            switch (issue.severity) {
+              case "CRITICAL": totalCritical++; break;
+              case "SERIOUS": totalSerious++; break;
+              case "MODERATE": totalModerate++; break;
+              case "MINOR": totalMinor++; break;
+            }
+          }
+          totalIssues += analysis.issues.length;
+
+          pageResults.push({
             url: analysis.url,
             title: analysis.title,
             score: analysis.score,
             issueCount: analysis.issues.length,
             loadTime: analysis.loadTime,
-          },
-        });
-
-        // Save issues in batches
-        if (analysis.issues.length > 0) {
-          await prisma.issue.createMany({
-            data: analysis.issues.map((issue) => ({
-              scanId,
-              pageResultId: pageResult.id,
-              axeRuleId: issue.axeRuleId,
-              severity: issue.severity,
-              impact: issue.impact,
-              wcagCriteria: issue.wcagCriteria,
-              wcagLevel: issue.wcagLevel,
-              description: issue.description,
-              helpText: issue.helpText,
-              fixSuggestion: issue.fixSuggestion,
-              htmlElement: issue.htmlElement,
-              cssSelector: issue.cssSelector,
-              pageUrl: issue.pageUrl,
-            })),
-          });
-        }
-
-        // Count severities
-        for (const issue of analysis.issues) {
-          switch (issue.severity) {
-            case "CRITICAL": totalCritical++; break;
-            case "SERIOUS": totalSerious++; break;
-            case "MODERATE": totalModerate++; break;
-            case "MINOR": totalMinor++; break;
-          }
-        }
-        totalIssues += analysis.issues.length;
-
-        pageResults.push({
-          url: analysis.url,
-          title: analysis.title,
-          score: analysis.score,
-          issueCount: analysis.issues.length,
-          loadTime: analysis.loadTime,
-        });
-      } catch (error) {
-        if (error instanceof PageAnalysisError) {
-          console.warn(`[Scanner] Page analysis failed for ${pageUrl}: ${error.message}`);
-
-          // Save a PageResult with no score to indicate failure
-          await prisma.pageResult.create({
-            data: {
-              scanId,
-              url: pageUrl,
-              title: null,
-              score: null,
-              issueCount: 0,
-              loadTime: error.loadTime,
-            },
           });
         } else {
-          console.error(`[Scanner] Unexpected error analyzing ${pageUrl}:`, error);
+          failedPages++;
         }
       }
 
-      // Update progress
+      // Update progress after each batch
       await prisma.scan.update({
         where: { id: scanId },
-        data: { scannedPages: i + 1 },
+        data: { scannedPages: pagesCompleted },
       }).catch(() => {});
     }
 
@@ -202,11 +237,16 @@ async function processScanJob(data: ScanJobData): Promise<void> {
 
     const duration = Math.round((Date.now() - startTime) / 1000);
 
-    // Finalize scan
+    // Build error message if some pages failed
+    const errorMessage = failedPages > 0
+      ? `${failedPages} van ${pagesToScan.length} pagina's konden niet worden gescand (timeout of niet bereikbaar).`
+      : null;
+
+    // Finalize scan — COMPLETED even if some pages failed (partial results are still useful)
     await prisma.scan.update({
       where: { id: scanId },
       data: {
-        status: "COMPLETED",
+        status: scoredPages.length > 0 ? "COMPLETED" : "FAILED",
         score: overallScore,
         totalPages: pagesToScan.length,
         scannedPages: pagesToScan.length,
@@ -216,21 +256,24 @@ async function processScanJob(data: ScanJobData): Promise<void> {
         moderateIssues: totalModerate,
         minorIssues: totalMinor,
         duration,
+        errorMessage,
         completedAt: new Date(),
       },
     });
 
     console.log(
       `[Scanner] Scan ${scanId} completed: score=${overallScore}, ` +
-        `pages=${pagesToScan.length}, issues=${totalIssues}, duration=${duration}s`
+        `pages=${scoredPages.length}/${pagesToScan.length} (${failedPages} failed), ` +
+        `issues=${totalIssues}, duration=${duration}s`
     );
 
     // Send email notifications (scan completed, score drop, critical issues)
-    try {
-      await notifyScanCompleted(prisma, scanId);
-    } catch (emailError) {
-      // Email failures should not fail the scan
-      console.error(`[Scanner] Failed to send notifications for scan ${scanId}:`, emailError);
+    if (scoredPages.length > 0) {
+      try {
+        await notifyScanCompleted(prisma, scanId);
+      } catch (emailError) {
+        console.error(`[Scanner] Failed to send notifications for scan ${scanId}:`, emailError);
+      }
     }
   } catch (error) {
     const duration = Math.round((Date.now() - startTime) / 1000);

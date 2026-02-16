@@ -35,19 +35,20 @@ export function calculateScore(
   return Math.max(0, Math.min(100, 100 - deductions));
 }
 
+/**
+ * Calculate the overall score across all pages.
+ *
+ * Uses a simple average of per-page scores. Each page is equally important
+ * regardless of how many individual element violations it has (those are
+ * already accounted for in the per-page deduplication by rule type).
+ */
 export function calculateOverallScore(
   pageScores: { score: number; issueCount: number }[]
 ): number {
   if (pageScores.length === 0) return 100;
 
-  const totalWeight = pageScores.reduce((sum, p) => sum + Math.max(1, p.issueCount), 0);
-
-  const weightedSum = pageScores.reduce(
-    (sum, p) => sum + p.score * Math.max(1, p.issueCount),
-    0
-  );
-
-  return Math.round((weightedSum / totalWeight) * 10) / 10;
+  const total = pageScores.reduce((sum, p) => sum + p.score, 0);
+  return Math.round((total / pageScores.length) * 10) / 10;
 }
 
 export function mapAxeSeverity(impact: string | undefined): IssueSeverity {

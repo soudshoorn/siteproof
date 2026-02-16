@@ -28,45 +28,45 @@ export function scanCompletedEmail(data: ScanCompletedEmailData): {
   const trendText =
     data.previousScore != null
       ? data.score > data.previousScore
-        ? `<span style="color: #22c55e;">▲ +${Math.round(data.score - data.previousScore)} punten</span> ten opzichte van de vorige scan`
+        ? `<span style="color:#16a34a;">▲ +${Math.round(data.score - data.previousScore)} punten</span> ten opzichte van de vorige scan`
         : data.score < data.previousScore
-          ? `<span style="color: #ef4444;">▼ ${Math.round(data.score - data.previousScore)} punten</span> ten opzichte van de vorige scan`
-          : `<span style="color: #888;">Gelijk</span> aan de vorige scan`
+          ? `<span style="color:#dc2626;">▼ ${Math.round(data.score - data.previousScore)} punten</span> ten opzichte van de vorige scan`
+          : `<span style="color:#94a3b8;">Gelijk</span> aan de vorige scan`
       : "";
 
   const content = `
-    <h1 style="color: #f5f5f5; font-size: 22px; font-weight: 700; margin: 0 0 8px;">Scan voltooid</h1>
-    <p style="color: #a3a3a3; font-size: 15px; margin: 0 0 24px; line-height: 1.6;">
-      De scan van <strong style="color: #f5f5f5;">${data.websiteName}</strong> is afgerond.
+    <h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0f172a;">Scan voltooid</h2>
+    <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#475569;">
+      De scan van <strong style="color:#0f172a;">${data.websiteName}</strong> is afgerond.
     </p>
 
     <!-- Score -->
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #1a1a1a; border-radius: 8px; margin-bottom: 24px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:24px;">
       <tr>
-        <td style="padding: 24px; text-align: center;">
+        <td style="padding:24px;text-align:center;">
           ${scoreCircle(data.score)}
-          <p style="color: #a3a3a3; font-size: 14px; margin: 8px 0 0;">
-            Toegankelijkheidsscore: <strong style="color: #f5f5f5;">${scoreLabel}</strong>
+          <p style="margin:8px 0 0;font-size:14px;color:#475569;">
+            Toegankelijkheidsscore: <strong style="color:#0f172a;">${scoreLabel}</strong>
           </p>
-          ${trendText ? `<p style="color: #a3a3a3; font-size: 13px; margin: 8px 0 0;">${trendText}</p>` : ""}
+          ${trendText ? `<p style="margin:8px 0 0;font-size:13px;color:#475569;">${trendText}</p>` : ""}
         </td>
       </tr>
     </table>
 
     <!-- Stats -->
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
       <tr>
-        <td style="padding: 16px; background-color: #1a1a1a; border-radius: 8px 0 0 8px; text-align: center; width: 33%;">
-          <p style="color: #a3a3a3; font-size: 12px; margin: 0 0 4px;">Pagina's</p>
-          <p style="color: #f5f5f5; font-size: 20px; font-weight: 700; margin: 0;">${data.pagesScanned}</p>
+        <td style="padding:16px;background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px 0 0 8px;text-align:center;width:33%;">
+          <p style="margin:0 0 4px;font-size:12px;color:#94a3b8;">Pagina's</p>
+          <p style="margin:0;font-size:20px;font-weight:700;color:#0f172a;">${data.pagesScanned}</p>
         </td>
-        <td style="padding: 16px; background-color: #1a1a1a; text-align: center; width: 34%; border-left: 1px solid #2a2a2a; border-right: 1px solid #2a2a2a;">
-          <p style="color: #a3a3a3; font-size: 12px; margin: 0 0 4px;">Issues</p>
-          <p style="color: #f5f5f5; font-size: 20px; font-weight: 700; margin: 0;">${data.totalIssues}</p>
+        <td style="padding:16px;background-color:#f8fafc;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;text-align:center;width:34%;">
+          <p style="margin:0 0 4px;font-size:12px;color:#94a3b8;">Issues</p>
+          <p style="margin:0;font-size:20px;font-weight:700;color:#0f172a;">${data.totalIssues}</p>
         </td>
-        <td style="padding: 16px; background-color: #1a1a1a; border-radius: 0 8px 8px 0; text-align: center; width: 33%;">
-          <p style="color: #a3a3a3; font-size: 12px; margin: 0 0 4px;">Duur</p>
-          <p style="color: #f5f5f5; font-size: 20px; font-weight: 700; margin: 0;">${data.duration}s</p>
+        <td style="padding:16px;background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:0 8px 8px 0;text-align:center;width:33%;">
+          <p style="margin:0 0 4px;font-size:12px;color:#94a3b8;">Duur</p>
+          <p style="margin:0;font-size:20px;font-weight:700;color:#0f172a;">${data.duration}s</p>
         </td>
       </tr>
     </table>
@@ -75,21 +75,21 @@ export function scanCompletedEmail(data: ScanCompletedEmailData): {
     ${
       data.totalIssues > 0
         ? `
-    <table role="presentation" cellpadding="0" cellspacing="8" style="margin-bottom: 24px;">
+    <table role="presentation" cellpadding="0" cellspacing="8" style="margin-bottom:24px;">
       <tr>
-        ${severityBadge("Kritiek", data.criticalIssues, "#ef4444")}
-        ${severityBadge("Serieus", data.seriousIssues, "#f97316")}
-        ${severityBadge("Matig", data.moderateIssues, "#eab308")}
-        ${severityBadge("Minor", data.minorIssues, "#3b82f6")}
+        ${severityBadge("Kritiek", data.criticalIssues, "#dc2626")}
+        ${severityBadge("Serieus", data.seriousIssues, "#ea580c")}
+        ${severityBadge("Matig", data.moderateIssues, "#ca8a04")}
+        ${severityBadge("Minor", data.minorIssues, "#2563eb")}
       </tr>
     </table>`
-        : `<p style="color: #22c55e; font-size: 14px; margin-bottom: 24px;">Geen issues gevonden. Uitstekend!</p>`
+        : `<p style="margin-bottom:24px;font-size:14px;color:#16a34a;">Geen issues gevonden. Uitstekend!</p>`
     }
 
     ${emailButton("Bekijk resultaten", `${APP_URL}/dashboard/scans/${data.scanId}`)}
 
-    <p style="color: #666; font-size: 13px; margin: 0; line-height: 1.6;">
-      Gescande website: <a href="${data.websiteUrl}" style="color: #14B8A6; text-decoration: none;">${data.websiteUrl}</a>
+    <p style="margin:0;font-size:13px;line-height:1.6;color:#94a3b8;">
+      Gescande website: <a href="${data.websiteUrl}" style="color:#0d9488;text-decoration:none;">${data.websiteUrl}</a>
     </p>
   `;
 

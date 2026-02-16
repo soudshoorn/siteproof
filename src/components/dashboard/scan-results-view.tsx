@@ -130,6 +130,19 @@ const severityConfig: Record<
 
 const severityOrder: Severity[] = ["CRITICAL", "SERIOUS", "MODERATE", "MINOR"];
 
+/** Show a readable short URL path. Returns hostname for root, path for subpages. */
+function displayUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const path = parsed.pathname;
+    if (!path || path === "/") return parsed.hostname;
+    // Remove trailing slash and return path
+    return path.endsWith("/") ? path.slice(0, -1) : path;
+  } catch {
+    return url;
+  }
+}
+
 export function ScanResultsView({ scan, eaaData }: { scan: ScanData; eaaData?: EaaData }) {
   const router = useRouter();
   const [pollData, setPollData] = useState<{
@@ -316,38 +329,91 @@ export function ScanResultsView({ scan, eaaData }: { scan: ScanData; eaaData?: E
       </div>
 
       {/* Status: in progress */}
-      {isInProgress && (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
-            <div className="relative size-16">
-              <div className="absolute inset-0 animate-ping rounded-full bg-primary/20" />
-              <div className="relative flex size-16 items-center justify-center rounded-full bg-primary/10">
-                <Search className="size-6 text-primary" />
+      {isInProgress && (() => {
+        const phaseLabels: Record<string, string> = {
+          QUEUED: "In de wachtrij...",
+          CRAWLING: "Pagina's ontdekken...",
+          SCANNING: "Pagina's analyseren...",
+          ANALYZING: "Score berekenen...",
+        };
+        const phaseLabel = phaseLabels[displayStatus] || displayStatus;
+        const progress = displayTotalPages
+          ? Math.round((displayScannedPages / displayTotalPages) * 100)
+          : 0;
+        const showProgress = displayStatus === "SCANNING" && displayTotalPages > 0;
+
+        return (
+          <Card>
+            <CardContent className="flex flex-col items-center gap-5 py-12 text-center">
+              <div className="relative size-16">
+                <div className="absolute inset-0 animate-ping rounded-full bg-primary/20" />
+                <div className="relative flex size-16 items-center justify-center rounded-full bg-primary/10">
+                  <Loader2 className="size-6 animate-spin text-primary" />
+                </div>
               </div>
-            </div>
-            <div>
-              <p className="text-lg font-medium">{nl.dashboard.scanInProgress}</p>
-              <p className="text-sm text-muted-foreground">
-                {displayScannedPages} van {displayTotalPages || "?"}{" "}
-                {nl.dashboard.pagesScanned}
-              </p>
-            </div>
-            <Badge variant="secondary">{displayStatus}</Badge>
-          </CardContent>
-        </Card>
-      )}
+              <div>
+                <p className="text-lg font-medium">{phaseLabel}</p>
+                {showProgress ? (
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {displayScannedPages} van {displayTotalPages}{" "}
+                    {nl.dashboard.pagesScanned}
+                  </p>
+                ) : displayStatus === "CRAWLING" && displayTotalPages > 0 ? (
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {displayTotalPages} pagina&apos;s gevonden
+                  </p>
+                ) : null}
+              </div>
+              {showProgress && (
+                <div className="w-full max-w-xs">
+                  <div className="h-2 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-primary transition-all duration-500"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">{progress}%</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {/* Failed */}
       {scan.status === "FAILED" && (
         <Card className="border-destructive/30">
           <CardContent className="py-8 text-center">
             <AlertCircle className="mx-auto size-8 text-destructive" />
-            <p className="mt-3 font-medium">Scan mislukt</p>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="mt-3 text-lg font-medium">Scan mislukt</p>
+            <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
               {scan.errorMessage || nl.scan.scanFailed}
             </p>
+            {scan.duration != null && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Duur: {scan.duration} seconden
+              </p>
+            )}
+            <Button
+              variant="outline"
+              className="mt-4"
+              asChild
+            >
+              <Link href={`/dashboard/websites/${scan.website.id}`}>
+                <ArrowLeft className="size-4" />
+                Terug naar website
+              </Link>
+            </Button>
           </CardContent>
         </Card>
+      )}
+
+      {/* Completed: warning if some pages failed */}
+      {scan.status === "COMPLETED" && scan.errorMessage && (
+        <div className="flex items-start gap-3 rounded-lg border border-severity-moderate/30 bg-severity-moderate/5 p-4">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-severity-moderate" />
+          <p className="text-sm text-muted-foreground">{scan.errorMessage}</p>
+        </div>
       )}
 
       {/* Completed: Scan meta */}
@@ -478,7 +544,7 @@ export function ScanResultsView({ scan, eaaData }: { scan: ScanData; eaaData?: E
                   <option value="ALL">Alle pagina&apos;s</option>
                   {uniquePages.map((url) => (
                     <option key={url} value={url}>
-                      {new URL(url).pathname}
+                      {displayUrl(url)}
                     </option>
                   ))}
                 </select>
@@ -547,14 +613,14 @@ export function ScanResultsView({ scan, eaaData }: { scan: ScanData; eaaData?: E
                               </p>
                               {count === 1 && (
                                 <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                                  {new URL(rule.pageUrl).pathname}
+                                  {displayUrl(rule.pageUrl)}
                                 </p>
                               )}
                               {count > 1 && (
                                 <p className="mt-0.5 text-xs text-muted-foreground">
                                   {count} elementen op{" "}
                                   {new Set(instances.map((i) => i.pageUrl)).size === 1
-                                    ? new URL(instances[0].pageUrl).pathname
+                                    ? displayUrl(instances[0].pageUrl)
                                     : `${new Set(instances.map((i) => i.pageUrl)).size} pagina's`}
                                 </p>
                               )}
@@ -620,7 +686,7 @@ export function ScanResultsView({ scan, eaaData }: { scan: ScanData; eaaData?: E
                                         rel="noopener noreferrer"
                                         className="inline-flex items-center gap-1 text-primary hover:underline"
                                       >
-                                        {new URL(instance.pageUrl).pathname}
+                                        {displayUrl(instance.pageUrl)}
                                         <ExternalLink className="size-3" />
                                       </a>
                                     </div>
@@ -666,11 +732,11 @@ export function ScanResultsView({ scan, eaaData }: { scan: ScanData; eaaData?: E
                                   rel="noopener noreferrer"
                                   className="hover:text-primary"
                                 >
-                                  {page.title || new URL(page.url).pathname}
+                                  {page.title || displayUrl(page.url)}
                                 </a>
                                 <br />
                                 <span className="text-xs text-muted-foreground">
-                                  {new URL(page.url).pathname}
+                                  {displayUrl(page.url)}
                                 </span>
                               </td>
                               <td className="py-3">
