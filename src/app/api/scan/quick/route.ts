@@ -2,34 +2,45 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { jsonSuccess, jsonError } from "@/lib/api/helpers";
-import puppeteer, { type Browser } from "puppeteer";
-import { analyzePage } from "@/lib/scanner/analyzer";
+
+const SCANNER_SERVICE_URL = process.env.SCANNER_SERVICE_URL;
+const SCANNER_SECRET = process.env.SCANNER_SECRET || "";
+
+/**
+ * Normalize a domain or URL to a full URL with protocol.
+ * "example.com" → "https://example.com"
+ * "http://example.com" → "http://example.com"
+ */
+function normalizeUrl(input: string): string {
+  const trimmed = input.trim();
+  if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+    return `https://${trimmed}`;
+  }
+  return trimmed;
+}
 
 const quickScanSchema = z.object({
   url: z
     .string()
-    .url("Voer een geldige URL in (bijv. https://jouwwebsite.nl)")
-    .refine(
-      (url) => {
-        try {
-          const parsed = new URL(url);
-          return parsed.protocol === "https:" || parsed.protocol === "http:";
-        } catch {
-          return false;
-        }
-      },
-      { message: "URL moet beginnen met http:// of https://" }
+    .min(1, "Voer een URL of domeinnaam in.")
+    .transform(normalizeUrl)
+    .pipe(
+      z.string().url("Voer een geldige URL of domeinnaam in (bijv. jouwwebsite.nl)")
     ),
 });
 
 /**
  * POST /api/scan/quick
  *
- * Free quick scan — runs Puppeteer + axe-core directly on a single page.
+ * Free quick scan — proxies to Railway scanner service (Puppeteer + axe-core).
  * Rate limited to 3 per IP per day via database check.
  */
 export async function POST(request: Request) {
   try {
+    if (!SCANNER_SERVICE_URL) {
+      return jsonError("Scanner service is niet geconfigureerd. Stel SCANNER_SERVICE_URL in.", 503);
+    }
+
     const body = await request.json().catch(() => null);
     if (!body) {
       return jsonError("Ongeldige request body.", 400);
@@ -70,31 +81,43 @@ export async function POST(request: Request) {
       data: { url, status: "SCANNING", ipAddress: ip },
     });
 
-    // Run scan directly with Puppeteer + axe-core
-    let browser: Browser | null = null;
+    // Proxy to Railway scanner service
     try {
-      browser = await puppeteer.launch({
-        headless: true,
-        args: [
-          "--no-sandbox",
-          "--disable-setuid-sandbox",
-          "--disable-dev-shm-usage",
-          "--disable-gpu",
-          "--disable-extensions",
-          "--disable-background-networking",
-          "--no-first-run",
-        ],
+      const scanResponse = await fetch(`${SCANNER_SERVICE_URL}/scan`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(SCANNER_SECRET ? { Authorization: `Bearer ${SCANNER_SECRET}` } : {}),
+        },
+        body: JSON.stringify({ url }),
+        signal: AbortSignal.timeout(30_000),
       });
 
-      const analysis = await analyzePage(browser, url);
+      const scanData = await scanResponse.json();
+
+      if (!scanResponse.ok || !scanData.success) {
+        throw new Error(scanData.error || "Scan mislukt");
+      }
+
+      const analysis = scanData.data;
 
       const severityOrder: Record<string, number> = { CRITICAL: 0, SERIOUS: 1, MODERATE: 2, MINOR: 3 };
       const topIssues = [...analysis.issues]
-        .sort((a, b) =>
+        .sort((a: { severity: string }, b: { severity: string }) =>
           (severityOrder[a.severity] ?? 4) - (severityOrder[b.severity] ?? 4)
         )
         .slice(0, 5)
-        .map((issue) => ({
+        .map((issue: {
+          axeRuleId: string;
+          severity: string;
+          description: string;
+          helpText: string;
+          fixSuggestion: string;
+          wcagCriteria: string[];
+          wcagLevel: string | null;
+          htmlElement: string | null;
+          cssSelector: string | null;
+        }) => ({
           axeRuleId: issue.axeRuleId,
           severity: issue.severity,
           description: issue.description,
@@ -107,10 +130,10 @@ export async function POST(request: Request) {
         }));
 
       const counts = {
-        critical: analysis.issues.filter((i) => i.severity === "CRITICAL").length,
-        serious: analysis.issues.filter((i) => i.severity === "SERIOUS").length,
-        moderate: analysis.issues.filter((i) => i.severity === "MODERATE").length,
-        minor: analysis.issues.filter((i) => i.severity === "MINOR").length,
+        critical: analysis.issues.filter((i: { severity: string }) => i.severity === "CRITICAL").length,
+        serious: analysis.issues.filter((i: { severity: string }) => i.severity === "SERIOUS").length,
+        moderate: analysis.issues.filter((i: { severity: string }) => i.severity === "MODERATE").length,
+        minor: analysis.issues.filter((i: { severity: string }) => i.severity === "MINOR").length,
         total: analysis.issues.length,
       };
 
@@ -124,7 +147,7 @@ export async function POST(request: Request) {
             loadTime: analysis.loadTime,
             topIssues,
             issueCounts: counts,
-            failedWcagCriteria: [...new Set(analysis.issues.flatMap((i) => i.wcagCriteria))] as string[],
+            failedWcagCriteria: [...new Set(analysis.issues.flatMap((i: { wcagCriteria: string[] }) => i.wcagCriteria))] as string[],
           },
         },
       });
@@ -153,14 +176,6 @@ export async function POST(request: Request) {
       });
 
       return jsonError(errorMessage, 422);
-    } finally {
-      if (browser) {
-        try {
-          await browser.close();
-        } catch {
-          // Browser might already be closed
-        }
-      }
     }
   } catch (error) {
     console.error("Quick scan error:", error);

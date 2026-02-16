@@ -152,7 +152,7 @@ export function ScanWidget({ variant = "hero", className }: ScanWidgetProps) {
       >
         <div className="relative flex-1">
           <Input
-            type="url"
+            type="text"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             placeholder={nl.landing.ctaPlaceholder}

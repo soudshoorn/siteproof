@@ -44,7 +44,7 @@ export const nl = {
     heroTitle: "Bewijs dat je website toegankelijk is.",
     heroSubtitle:
       "De EAA is van kracht. Scan je website op WCAG 2.1 AA en ontvang een helder rapport met concrete verbeterpunten — in begrijpelijk Nederlands.",
-    ctaPlaceholder: "https://jouwwebsite.nl",
+    ctaPlaceholder: "jouwwebsite.nl",
     ctaButton: "Gratis scannen",
     urgencyTitle: "De EAA is van kracht. Voldoet jouw website?",
     urgencyText:

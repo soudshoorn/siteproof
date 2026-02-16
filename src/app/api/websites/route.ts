@@ -3,16 +3,21 @@ import { prisma } from "@/lib/db";
 import { authenticateRequest, jsonSuccess, jsonError, withErrorHandling } from "@/lib/api/helpers";
 import { enforcePlanLimits } from "@/lib/plan-enforcement";
 
+function normalizeUrl(input: string): string {
+  const trimmed = input.trim();
+  if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+    return `https://${trimmed}`;
+  }
+  return trimmed;
+}
+
 const createWebsiteSchema = z.object({
   url: z
     .string()
-    .url("Voer een geldige URL in.")
-    .refine(
-      (url) => {
-        const parsed = new URL(url);
-        return parsed.protocol === "https:" || parsed.protocol === "http:";
-      },
-      { message: "URL moet beginnen met http:// of https://" }
+    .min(1, "Voer een URL of domeinnaam in.")
+    .transform(normalizeUrl)
+    .pipe(
+      z.string().url("Voer een geldige URL of domeinnaam in (bijv. jouwwebsite.nl)")
     ),
   name: z.string().min(1, "Naam is verplicht.").max(100),
   organizationId: z.string().uuid(),

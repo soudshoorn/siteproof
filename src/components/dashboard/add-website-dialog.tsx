@@ -103,9 +103,9 @@ export function AddWebsiteDialog({
             <Input
               id="website-url"
               name="url"
-              type="url"
+              type="text"
               required
-              placeholder="https://mijnwebsite.nl"
+              placeholder="mijnwebsite.nl"
               disabled={loading}
             />
           </div>
