@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { prisma } from "@/lib/db";
 import { sendWelcomeEmail } from "@/lib/email/notifications";
 
@@ -19,7 +19,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/auth/login?error=no_code`);
   }
 
-  const response = NextResponse.next({ request });
+  // Collect cookies that Supabase sets during session exchange
+  const pendingCookies: { name: string; value: string; options: CookieOptions }[] = [];
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -30,9 +31,7 @@ export async function GET(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            response.cookies.set(name, value, options);
-          });
+          pendingCookies.push(...cookiesToSet);
         },
       },
     }
@@ -46,63 +45,75 @@ export async function GET(request: NextRequest) {
 
   // Sync Supabase user to Prisma DB
   const supabaseUser = data.user;
-  let user = await prisma.user.findUnique({
-    where: { supabaseId: supabaseUser.id },
-  });
 
-  if (!user) {
-    const fullName =
-      supabaseUser.user_metadata?.full_name ||
-      supabaseUser.user_metadata?.name ||
-      null;
-    const orgName = fullName ? `${fullName}'s organisatie` : "Mijn organisatie";
+  try {
+    let user = await prisma.user.findUnique({
+      where: { supabaseId: supabaseUser.id },
+    });
 
-    // Generate unique slug
-    let slug = orgName
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "")
-      .slice(0, 48);
-    let attempt = 0;
-    while (await prisma.organization.findUnique({ where: { slug } })) {
-      attempt++;
-      slug = `${slug.slice(0, 44)}-${attempt}`;
-    }
+    if (!user) {
+      const fullName =
+        supabaseUser.user_metadata?.full_name ||
+        supabaseUser.user_metadata?.name ||
+        null;
+      const orgName = fullName ? `${fullName}'s organisatie` : "Mijn organisatie";
 
-    user = await prisma.user.create({
-      data: {
-        supabaseId: supabaseUser.id,
-        email: supabaseUser.email!,
-        fullName,
-        avatarUrl: supabaseUser.user_metadata?.avatar_url || null,
-        memberships: {
-          create: {
-            role: "OWNER",
-            organization: {
-              create: {
-                name: orgName,
-                slug,
-                planType: "FREE",
-                maxWebsites: 1,
-                maxPagesPerScan: 5,
+      // Generate unique slug
+      let slug = orgName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "")
+        .slice(0, 48);
+      let attempt = 0;
+      while (await prisma.organization.findUnique({ where: { slug } })) {
+        attempt++;
+        slug = `${slug.slice(0, 44)}-${attempt}`;
+      }
+
+      user = await prisma.user.create({
+        data: {
+          supabaseId: supabaseUser.id,
+          email: supabaseUser.email!,
+          fullName,
+          avatarUrl: supabaseUser.user_metadata?.avatar_url || null,
+          memberships: {
+            create: {
+              role: "OWNER",
+              organization: {
+                create: {
+                  name: orgName,
+                  slug,
+                  planType: "FREE",
+                  maxWebsites: 1,
+                  maxPagesPerScan: 5,
+                },
               },
             },
           },
         },
-      },
-    });
+      });
 
-    // Send welcome email (non-blocking)
-    sendWelcomeEmail(supabaseUser.email!, fullName || "").catch((err) =>
-      console.error("[Auth] Failed to send welcome email:", err)
-    );
+      // Send welcome email (non-blocking)
+      sendWelcomeEmail(supabaseUser.email!, fullName || "").catch((err) =>
+        console.error("[Auth] Failed to send welcome email:", err)
+      );
+    }
+  } catch (err) {
+    console.error("[Auth] Failed to sync user to database:", err);
+    // Still redirect — the user is authenticated in Supabase,
+    // syncUser in dashboard will catch up on next load
   }
 
-  // Password recovery: redirect to password update page
-  if (type === "recovery") {
-    return NextResponse.redirect(`${origin}/auth/update-password`);
+  // Determine redirect destination
+  const redirectUrl = type === "recovery"
+    ? `${origin}/auth/update-password`
+    : `${origin}/dashboard`;
+
+  // Create redirect response and attach all session cookies
+  const response = NextResponse.redirect(redirectUrl);
+  for (const { name, value, options } of pendingCookies) {
+    response.cookies.set(name, value, options);
   }
 
-  // Default: redirect to dashboard
-  return NextResponse.redirect(`${origin}/dashboard`);
+  return response;
 }
