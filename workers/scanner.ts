@@ -3,13 +3,17 @@ import { Worker } from "bullmq";
 import puppeteer from "puppeteer";
 import type { Browser } from "puppeteer";
 import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import pg from "pg";
 import { crawlWebsite } from "../src/lib/scanner/crawler";
 import { analyzePage, PageAnalysisError } from "../src/lib/scanner/analyzer";
 import { calculateOverallScore } from "../src/lib/scanner/score";
 import { notifyScanCompleted } from "../src/lib/email/notifications";
 import type { ScanJobData, QuickScanJobData } from "../src/lib/scanner/queue";
 
-const prisma = new PrismaClient();
+const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
 
 let browser: Browser | null = null;
 
