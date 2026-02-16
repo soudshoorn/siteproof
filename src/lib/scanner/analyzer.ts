@@ -4,7 +4,7 @@ import { getTranslation } from "./translations/nl";
 import { calculateScore, mapAxeSeverity } from "./score";
 
 const USER_AGENT = "SiteProof/1.0 (Accessibility Scanner)";
-const PAGE_TIMEOUT = 30_000;
+const PAGE_TIMEOUT = 15_000; // 15s — if a page hasn't loaded by now, skip it
 
 export interface PageAnalysis {
   url: string;
@@ -67,16 +67,16 @@ export async function analyzePage(
     await page.setRequestInterception(true);
     page.on("request", (request) => {
       const type = request.resourceType();
-      if (["font", "media"].includes(type)) {
+      if (["image", "font", "media"].includes(type)) {
         request.abort();
       } else {
         request.continue();
       }
     });
 
-    // Navigate to the page
+    // Navigate to the page — use domcontentloaded + manual wait for speed
     const response = await page.goto(url, {
-      waitUntil: "networkidle2",
+      waitUntil: "domcontentloaded",
       timeout: PAGE_TIMEOUT,
     });
 
@@ -135,7 +135,7 @@ export async function analyzePage(
  * Wait for the DOM to stabilize (no more mutations for 500ms).
  * Important for SPAs that render after initial load.
  */
-async function waitForDomStability(page: Page, timeout = 5000): Promise<void> {
+async function waitForDomStability(page: Page, timeout = 3000): Promise<void> {
   try {
     await page.evaluate((timeoutMs: number) => {
       return new Promise<void>((resolve) => {

@@ -31,15 +31,30 @@ export async function crawlWebsite(
   onProgress?: (scannedPages: number, totalFound: number) => void
 ): Promise<CrawlResult> {
   const baseUrl = new URL(startUrl);
-  const origin = baseUrl.origin;
   const discovered = new Set<string>();
   const queue: string[] = [];
   const errors: CrawlError[] = [];
+
+  // Resolve the canonical origin by following redirects (e.g. datajobs.nl → www.datajobs.nl)
+  const resolvedOrigin = await resolveOrigin(startUrl);
+  const origin = resolvedOrigin || baseUrl.origin;
+
+  // Build a set of allowed origins (www and non-www variants)
+  const allowedOrigins = buildAllowedOrigins(origin);
 
   // Normalize and add the start URL
   const normalizedStart = normalizeUrl(startUrl);
   discovered.add(normalizedStart);
   queue.push(normalizedStart);
+
+  // Also add the resolved origin root if different
+  if (resolvedOrigin && resolvedOrigin !== baseUrl.origin) {
+    const resolvedRoot = normalizeUrl(resolvedOrigin + "/");
+    if (!discovered.has(resolvedRoot)) {
+      discovered.add(resolvedRoot);
+      queue.push(resolvedRoot);
+    }
+  }
 
   // Parse robots.txt (fast, via fetch)
   const robotsRules = await fetchRobotsTxt(origin);
@@ -50,7 +65,7 @@ export async function crawlWebsite(
     const normalized = normalizeUrl(url);
     if (
       !discovered.has(normalized) &&
-      isInternalHtmlUrl(normalized, origin) &&
+      isInternalHtmlUrl(normalized, allowedOrigins) &&
       !isDisallowedByRobots(normalized, origin, robotsRules)
     ) {
       discovered.add(normalized);
@@ -83,13 +98,13 @@ export async function crawlWebsite(
 
     try {
       bfsCrawlCount++;
-      const links = await extractLinks(browser, url, origin);
+      const links = await extractLinks(browser, url, allowedOrigins);
 
       for (const link of links) {
         const normalized = normalizeUrl(link);
         if (
           !discovered.has(normalized) &&
-          isInternalHtmlUrl(normalized, origin) &&
+          isInternalHtmlUrl(normalized, allowedOrigins) &&
           !isDisallowedByRobots(normalized, origin, robotsRules)
         ) {
           discovered.add(normalized);
@@ -242,7 +257,7 @@ async function parseSitemap(
 async function extractLinks(
   browser: Browser,
   url: string,
-  origin: string
+  allowedOrigins: Set<string>
 ): Promise<string[]> {
   let page: Page | null = null;
   try {
@@ -279,20 +294,21 @@ async function extractLinks(
     }
 
     // Extract all anchor hrefs
-    const links = await page.evaluate((pageOrigin: string) => {
+    const originsArray = Array.from(allowedOrigins);
+    const links = await page.evaluate((origins: string[]) => {
       const anchors = Array.from(document.querySelectorAll("a[href]"));
       return anchors
         .map((a) => {
           try {
             const href = (a as HTMLAnchorElement).href;
-            if (href.startsWith(pageOrigin)) return href;
+            if (origins.some((o) => href.startsWith(o))) return href;
             return null;
           } catch {
             return null;
           }
         })
         .filter((href): href is string => href !== null);
-    }, origin);
+    }, originsArray);
 
     return links;
   } catch (error) {
@@ -324,11 +340,65 @@ function normalizeUrl(url: string): string {
 }
 
 /**
+ * Resolve the canonical origin by following redirects (e.g. datajobs.nl → www.datajobs.nl).
+ * Returns the final origin or null if resolution fails.
+ */
+async function resolveOrigin(startUrl: string): Promise<string | null> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5_000);
+
+    const response = await fetch(startUrl, {
+      method: "HEAD",
+      headers: { "User-Agent": USER_AGENT },
+      signal: controller.signal,
+      redirect: "follow",
+    });
+    clearTimeout(timeout);
+
+    const finalUrl = response.url;
+    if (finalUrl) {
+      return new URL(finalUrl).origin;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Build a set of allowed origins including www and non-www variants.
+ * This ensures sitemap URLs from either variant are accepted.
+ */
+function buildAllowedOrigins(origin: string): Set<string> {
+  const origins = new Set<string>();
+  origins.add(origin);
+
+  try {
+    const parsed = new URL(origin);
+    if (parsed.hostname.startsWith("www.")) {
+      // Add non-www variant
+      const nonWww = `${parsed.protocol}//${parsed.hostname.slice(4)}`;
+      origins.add(nonWww);
+    } else {
+      // Add www variant
+      const withWww = `${parsed.protocol}//www.${parsed.hostname}`;
+      origins.add(withWww);
+    }
+  } catch {
+    // Keep just the original origin
+  }
+
+  return origins;
+}
+
+/**
  * Check if a URL is an internal HTML page (not a file download, image, etc.)
  */
-function isInternalHtmlUrl(url: string, origin: string): boolean {
+function isInternalHtmlUrl(url: string, allowedOrigins: Set<string>): boolean {
   try {
-    if (!url.startsWith(origin)) return false;
+    const matchesOrigin = Array.from(allowedOrigins).some((o) => url.startsWith(o));
+    if (!matchesOrigin) return false;
 
     const skipExtensions = [
       ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".ico",

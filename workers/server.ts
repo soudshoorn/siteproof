@@ -2,9 +2,16 @@ import "dotenv/config";
 import express, { type Request, type Response, type NextFunction } from "express";
 import puppeteer from "puppeteer";
 import type { Browser } from "puppeteer";
-import { analyzePage } from "../src/lib/scanner/analyzer";
+import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import pg from "pg";
+import { analyzePage, PageAnalysisError } from "../src/lib/scanner/analyzer";
 import { crawlWebsite } from "../src/lib/scanner/crawler";
 import { calculateOverallScore } from "../src/lib/scanner/score";
+
+const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
 const MAX_CONCURRENT_SCANS = parseInt(process.env.MAX_CONCURRENT_SCANS || "10", 10);
@@ -111,6 +118,9 @@ app.post("/scan", async (req: Request, res: Response) => {
   }
 });
 
+/** How many pages to analyze simultaneously */
+const SCAN_CONCURRENCY = 3;
+
 /**
  * POST /scan/full
  *
@@ -149,48 +159,72 @@ app.post("/scan/full", async (req: Request, res: Response) => {
       return;
     }
 
-    // Phase 2: Analyze each page
-    const pageResults = [];
+    // Phase 2: Analyze pages concurrently (batches of SCAN_CONCURRENCY)
+    const pageResults: Array<{
+      url: string;
+      title: string | null;
+      score: number | null;
+      loadTime: number | null;
+      issueCount: number;
+      issues: Array<unknown>;
+      error?: string;
+    }> = [];
     let totalCritical = 0;
     let totalSerious = 0;
     let totalModerate = 0;
     let totalMinor = 0;
     let totalIssues = 0;
 
-    for (const pageUrl of pagesToScan) {
-      try {
-        const analysis = await analyzePage(activeBrowser, pageUrl);
+    for (let i = 0; i < pagesToScan.length; i += SCAN_CONCURRENCY) {
+      const batch = pagesToScan.slice(i, i + SCAN_CONCURRENCY);
 
-        for (const issue of analysis.issues) {
-          switch (issue.severity) {
-            case "CRITICAL": totalCritical++; break;
-            case "SERIOUS": totalSerious++; break;
-            case "MODERATE": totalModerate++; break;
-            case "MINOR": totalMinor++; break;
+      const results = await Promise.allSettled(
+        batch.map(async (pageUrl) => {
+          try {
+            const analysis = await analyzePage(activeBrowser, pageUrl);
+            return { success: true as const, analysis };
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.warn(`[Scanner] Page failed: ${pageUrl}: ${message}`);
+            return { success: false as const, pageUrl, error: message };
           }
-        }
-        totalIssues += analysis.issues.length;
+        })
+      );
 
-        pageResults.push({
-          url: analysis.url,
-          title: analysis.title,
-          score: analysis.score,
-          loadTime: analysis.loadTime,
-          issueCount: analysis.issues.length,
-          issues: analysis.issues,
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        console.warn(`[Scanner] Page failed: ${pageUrl}: ${message}`);
-        pageResults.push({
-          url: pageUrl,
-          title: null,
-          score: null,
-          loadTime: null,
-          issueCount: 0,
-          issues: [],
-          error: message,
-        });
+      for (const result of results) {
+        if (result.status === "rejected") continue;
+
+        const value = result.value;
+        if (value.success) {
+          const analysis = value.analysis;
+          for (const issue of analysis.issues) {
+            switch (issue.severity) {
+              case "CRITICAL": totalCritical++; break;
+              case "SERIOUS": totalSerious++; break;
+              case "MODERATE": totalModerate++; break;
+              case "MINOR": totalMinor++; break;
+            }
+          }
+          totalIssues += analysis.issues.length;
+          pageResults.push({
+            url: analysis.url,
+            title: analysis.title,
+            score: analysis.score,
+            loadTime: analysis.loadTime,
+            issueCount: analysis.issues.length,
+            issues: analysis.issues,
+          });
+        } else {
+          pageResults.push({
+            url: value.pageUrl,
+            title: null,
+            score: null,
+            loadTime: null,
+            issueCount: 0,
+            issues: [],
+            error: value.error,
+          });
+        }
       }
     }
 
@@ -207,6 +241,7 @@ app.post("/scan/full", async (req: Request, res: Response) => {
         : 0;
 
     const duration = Date.now() - startTime;
+    const failedPages = pageResults.filter((p) => p.error).length;
 
     res.json({
       success: true,
@@ -220,6 +255,7 @@ app.post("/scan/full", async (req: Request, res: Response) => {
         moderateIssues: totalModerate,
         minorIssues: totalMinor,
         duration,
+        failedPages,
         crawlErrors: crawlResult.errors,
         pages: pageResults,
       },
@@ -236,6 +272,217 @@ app.post("/scan/full", async (req: Request, res: Response) => {
     activeScanCount--;
   }
 });
+
+/**
+ * POST /scan/async
+ *
+ * Async full scan: accepts a scanId, runs the scan in the background,
+ * and updates the database directly with progress and results.
+ * Returns immediately so the API route doesn't have to wait.
+ */
+app.post("/scan/async", async (req: Request, res: Response) => {
+  const { scanId, url, maxPages = 5 } = req.body;
+
+  if (!scanId || !url) {
+    res.status(400).json({ error: "scanId and url are required" });
+    return;
+  }
+
+  if (activeScanCount >= MAX_CONCURRENT_SCANS) {
+    res.status(429).json({ error: "Te veel gelijktijdige scans." });
+    return;
+  }
+
+  // Respond immediately — scan runs in the background
+  res.json({ success: true, message: "Scan gestart" });
+
+  // Run the scan async (not awaited)
+  runAsyncScan(scanId, url, maxPages).catch((err) => {
+    console.error(`[Scanner] Async scan ${scanId} crashed:`, err);
+  });
+});
+
+async function runAsyncScan(scanId: string, url: string, maxPages: number): Promise<void> {
+  activeScanCount++;
+  const startTime = Date.now();
+
+  try {
+    // Phase 1: Crawl
+    await prisma.scan.update({
+      where: { id: scanId },
+      data: { status: "CRAWLING" },
+    });
+
+    const activeBrowser = await getBrowser();
+    const crawlResult = await crawlWebsite(activeBrowser, url, maxPages, async (_scanned, total) => {
+      await prisma.scan.update({
+        where: { id: scanId },
+        data: { totalPages: total },
+      }).catch(() => {});
+    });
+
+    const pagesToScan = crawlResult.urls;
+    console.log(`[Scanner] Scan ${scanId}: found ${pagesToScan.length} pages for ${url}`);
+
+    if (pagesToScan.length === 0) {
+      throw new Error(`Geen pagina's gevonden op ${url}. Controleer of de website bereikbaar is.`);
+    }
+
+    // Phase 2: Analyze pages concurrently
+    await prisma.scan.update({
+      where: { id: scanId },
+      data: { status: "SCANNING", totalPages: pagesToScan.length, scannedPages: 0 },
+    });
+
+    let totalCritical = 0;
+    let totalSerious = 0;
+    let totalModerate = 0;
+    let totalMinor = 0;
+    let totalIssues = 0;
+    let pagesCompleted = 0;
+    let failedPages = 0;
+    const scoredPages: Array<{ score: number; issueCount: number }> = [];
+
+    for (let i = 0; i < pagesToScan.length; i += SCAN_CONCURRENCY) {
+      const batch = pagesToScan.slice(i, i + SCAN_CONCURRENCY);
+
+      const results = await Promise.allSettled(
+        batch.map(async (pageUrl) => {
+          try {
+            const analysis = await analyzePage(activeBrowser, pageUrl);
+
+            // Save PageResult + issues to DB
+            const pageResult = await prisma.pageResult.create({
+              data: {
+                scanId,
+                url: analysis.url,
+                title: analysis.title,
+                score: analysis.score,
+                issueCount: analysis.issues.length,
+                loadTime: analysis.loadTime,
+              },
+            });
+
+            if (analysis.issues.length > 0) {
+              await prisma.issue.createMany({
+                data: analysis.issues.map((issue) => ({
+                  scanId,
+                  pageResultId: pageResult.id,
+                  axeRuleId: issue.axeRuleId,
+                  severity: issue.severity,
+                  impact: issue.impact,
+                  wcagCriteria: issue.wcagCriteria,
+                  wcagLevel: issue.wcagLevel,
+                  description: issue.description,
+                  helpText: issue.helpText,
+                  fixSuggestion: issue.fixSuggestion,
+                  htmlElement: issue.htmlElement,
+                  cssSelector: issue.cssSelector,
+                  pageUrl: issue.pageUrl,
+                })),
+              });
+            }
+
+            return analysis;
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            const loadTime = error instanceof PageAnalysisError ? error.loadTime : null;
+            console.warn(`[Scanner] Page failed: ${pageUrl}: ${message}`);
+
+            // Save failed page result
+            await prisma.pageResult.create({
+              data: {
+                scanId,
+                url: pageUrl,
+                title: null,
+                score: null,
+                issueCount: 0,
+                loadTime: loadTime,
+              },
+            }).catch(() => {});
+
+            return null;
+          }
+        })
+      );
+
+      // Tally results
+      for (const result of results) {
+        pagesCompleted++;
+        if (result.status === "fulfilled" && result.value) {
+          const analysis = result.value;
+          for (const issue of analysis.issues) {
+            switch (issue.severity) {
+              case "CRITICAL": totalCritical++; break;
+              case "SERIOUS": totalSerious++; break;
+              case "MODERATE": totalModerate++; break;
+              case "MINOR": totalMinor++; break;
+            }
+          }
+          totalIssues += analysis.issues.length;
+          scoredPages.push({ score: analysis.score, issueCount: analysis.issues.length });
+        } else {
+          failedPages++;
+        }
+      }
+
+      // Update progress after each batch
+      await prisma.scan.update({
+        where: { id: scanId },
+        data: { scannedPages: pagesCompleted },
+      }).catch(() => {});
+    }
+
+    // Phase 3: Finalize
+    const overallScore = scoredPages.length > 0
+      ? calculateOverallScore(scoredPages)
+      : 0;
+
+    const duration = Math.round((Date.now() - startTime) / 1000);
+    const errorMessage = failedPages > 0
+      ? `${failedPages} van ${pagesToScan.length} pagina's konden niet worden gescand.`
+      : null;
+
+    await prisma.scan.update({
+      where: { id: scanId },
+      data: {
+        status: scoredPages.length > 0 ? "COMPLETED" : "FAILED",
+        score: overallScore,
+        totalPages: pagesToScan.length,
+        scannedPages: pagesToScan.length,
+        totalIssues,
+        criticalIssues: totalCritical,
+        seriousIssues: totalSerious,
+        moderateIssues: totalModerate,
+        minorIssues: totalMinor,
+        duration,
+        errorMessage,
+        completedAt: new Date(),
+      },
+    });
+
+    console.log(
+      `[Scanner] Scan ${scanId} completed: score=${overallScore}, ` +
+      `pages=${scoredPages.length}/${pagesToScan.length}, issues=${totalIssues}, duration=${duration}s`
+    );
+  } catch (error) {
+    const duration = Math.round((Date.now() - startTime) / 1000);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`[Scanner] Scan ${scanId} failed:`, errorMessage);
+
+    await prisma.scan.update({
+      where: { id: scanId },
+      data: {
+        status: "FAILED",
+        errorMessage,
+        duration,
+        completedAt: new Date(),
+      },
+    });
+  } finally {
+    activeScanCount--;
+  }
+}
 
 // Start server
 app.listen(PORT, () => {

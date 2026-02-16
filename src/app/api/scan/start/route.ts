@@ -54,120 +54,33 @@ export const POST = withErrorHandling(async (request: Request) => {
     },
   });
 
-  // Run scan synchronously — Vercel kills background work after response is sent
-  const startTime = Date.now();
-
+  // Fire-and-forget: tell the scanner service to run the scan async
+  // The scanner service updates the DB directly with progress and results
   try {
-    await prisma.scan.update({
-      where: { id: scan.id },
-      data: { status: "SCANNING" },
-    });
-
-    const scanResponse = await fetch(`${SCANNER_SERVICE_URL}/scan/full`, {
+    const scanResponse = await fetch(`${SCANNER_SERVICE_URL}/scan/async`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         ...(SCANNER_SECRET ? { Authorization: `Bearer ${SCANNER_SECRET}` } : {}),
       },
-      body: JSON.stringify({ url: website.url, maxPages }),
-      signal: AbortSignal.timeout(maxPages * 35_000),
+      body: JSON.stringify({
+        scanId: scan.id,
+        url: website.url,
+        maxPages,
+      }),
+      signal: AbortSignal.timeout(10_000), // Just needs to accept the job
     });
 
-    const scanData = await scanResponse.json();
-
-    if (!scanResponse.ok || !scanData.success) {
-      throw new Error(scanData.error || "Scan mislukt");
+    if (!scanResponse.ok) {
+      const data = await scanResponse.json().catch(() => ({}));
+      throw new Error(data.error || "Scanner service niet bereikbaar");
     }
-
-    const result = scanData.data;
-
-    // Save page results and issues
-    for (const page of result.pages) {
-      if (page.error) {
-        await prisma.pageResult.create({
-          data: {
-            scanId: scan.id,
-            url: page.url,
-            title: null,
-            score: null,
-            issueCount: 0,
-            loadTime: page.loadTime,
-          },
-        });
-        continue;
-      }
-
-      const pageResult = await prisma.pageResult.create({
-        data: {
-          scanId: scan.id,
-          url: page.url,
-          title: page.title,
-          score: page.score,
-          issueCount: page.issueCount,
-          loadTime: page.loadTime,
-        },
-      });
-
-      if (page.issues && page.issues.length > 0) {
-        await prisma.issue.createMany({
-          data: page.issues.map((issue: {
-            axeRuleId: string;
-            severity: string;
-            impact: string;
-            wcagCriteria: string[];
-            wcagLevel: string | null;
-            description: string;
-            helpText: string;
-            fixSuggestion: string;
-            htmlElement: string | null;
-            cssSelector: string | null;
-            pageUrl: string;
-          }) => ({
-            scanId: scan.id,
-            pageResultId: pageResult.id,
-            axeRuleId: issue.axeRuleId,
-            severity: issue.severity as "CRITICAL" | "SERIOUS" | "MODERATE" | "MINOR",
-            impact: issue.impact as "CRITICAL" | "SERIOUS" | "MODERATE" | "MINOR",
-            wcagCriteria: issue.wcagCriteria,
-            wcagLevel: issue.wcagLevel,
-            description: issue.description,
-            helpText: issue.helpText,
-            fixSuggestion: issue.fixSuggestion,
-            htmlElement: issue.htmlElement,
-            cssSelector: issue.cssSelector,
-            pageUrl: issue.pageUrl,
-          })),
-        });
-      }
-    }
-
-    const duration = Math.round((Date.now() - startTime) / 1000);
-
-    // Finalize scan
-    await prisma.scan.update({
-      where: { id: scan.id },
-      data: {
-        status: "COMPLETED",
-        score: result.score,
-        totalPages: result.totalPages,
-        scannedPages: result.totalPages,
-        totalIssues: result.totalIssues,
-        criticalIssues: result.criticalIssues,
-        seriousIssues: result.seriousIssues,
-        moderateIssues: result.moderateIssues,
-        minorIssues: result.minorIssues,
-        duration,
-        completedAt: new Date(),
-      },
-    });
 
     return jsonSuccess({
       id: scan.id,
-      status: "COMPLETED",
-      score: result.score,
+      status: "QUEUED",
     }, 201);
   } catch (error) {
-    const duration = Math.round((Date.now() - startTime) / 1000);
     const errorMessage = error instanceof Error ? error.message : String(error);
 
     await prisma.scan.update({
@@ -175,13 +88,10 @@ export const POST = withErrorHandling(async (request: Request) => {
       data: {
         status: "FAILED",
         errorMessage,
-        duration,
         completedAt: new Date(),
       },
     });
 
-    return jsonError(`Scan mislukt: ${errorMessage}`, 422);
+    return jsonError(`Scan kon niet gestart worden: ${errorMessage}`, 422);
   }
 });
-
-export const maxDuration = 300; // 5 minutes for full scans

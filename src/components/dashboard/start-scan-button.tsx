@@ -41,7 +41,7 @@ export function StartScanButton({
         return;
       }
 
-      toast.success("Scan voltooid!");
+      toast.success("Scan gestart!");
       router.push(`/dashboard/scans/${data.data.id}`);
     } catch {
       toast.error(nl.scan.scanFailed);
