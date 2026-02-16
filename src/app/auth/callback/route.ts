@@ -105,9 +105,13 @@ export async function GET(request: NextRequest) {
   }
 
   // Determine redirect destination
+  const plan = searchParams.get("plan");
+  const validPlans = ["starter", "professional", "bureau"];
   const redirectUrl = type === "recovery"
     ? `${origin}/auth/update-password`
-    : `${origin}/dashboard`;
+    : plan && validPlans.includes(plan)
+      ? `${origin}/dashboard/settings/billing?upgrade=${plan}`
+      : `${origin}/dashboard`;
 
   // Create redirect response and attach all session cookies
   const response = NextResponse.redirect(redirectUrl);

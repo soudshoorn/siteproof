@@ -1,7 +1,9 @@
 "use client";
 
 import { useActionState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,7 +19,17 @@ import { nl } from "@/lib/i18n/nl";
 import { registerAction, type AuthResult } from "@/lib/auth/actions";
 import { AlertCircle, Loader2 } from "lucide-react";
 
-export default function RegisterPage() {
+const planLabels: Record<string, string> = {
+  starter: "Starter",
+  professional: "Professional",
+  bureau: "Bureau",
+};
+
+function RegisterForm() {
+  const searchParams = useSearchParams();
+  const plan = searchParams.get("plan");
+  const planLabel = plan ? planLabels[plan] : null;
+
   const [state, formAction, isPending] = useActionState<AuthResult | null, FormData>(
     async (_prev, formData) => {
       return await registerAction(formData);
@@ -30,11 +42,14 @@ export default function RegisterPage() {
       <CardHeader className="text-center">
         <CardTitle className="text-2xl">{nl.auth.registerTitle}</CardTitle>
         <CardDescription>
-          Maak een gratis account aan en scan je eerste website.
+          {planLabel
+            ? `Maak een account aan om het ${planLabel} plan te activeren.`
+            : "Maak een gratis account aan en scan je eerste website."}
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form action={formAction} className="space-y-4">
+          {plan && <input type="hidden" name="plan" value={plan} />}
           {state?.error && (
             <div
               className="flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive"
@@ -105,7 +120,7 @@ export default function RegisterPage() {
                 {nl.common.loading}
               </>
             ) : (
-              nl.auth.registerButton
+              planLabel ? `Account aanmaken & ${planLabel} activeren` : nl.auth.registerButton
             )}
           </Button>
         </form>
@@ -119,5 +134,13 @@ export default function RegisterPage() {
         </p>
       </CardFooter>
     </Card>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense>
+      <RegisterForm />
+    </Suspense>
   );
 }

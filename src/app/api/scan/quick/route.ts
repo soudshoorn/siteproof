@@ -102,10 +102,26 @@ export async function POST(request: Request) {
       const analysis = scanData.data;
 
       const severityOrder: Record<string, number> = { CRITICAL: 0, SERIOUS: 1, MODERATE: 2, MINOR: 3 };
-      const topIssues = [...analysis.issues]
+
+      // Deduplicate by axeRuleId — show unique issue types, not individual elements
+      const seenRules = new Set<string>();
+      const uniqueIssues = [...analysis.issues]
         .sort((a: { severity: string }, b: { severity: string }) =>
           (severityOrder[a.severity] ?? 4) - (severityOrder[b.severity] ?? 4)
         )
+        .filter((issue: { axeRuleId: string }) => {
+          if (seenRules.has(issue.axeRuleId)) return false;
+          seenRules.add(issue.axeRuleId);
+          return true;
+        });
+
+      // Count instances per rule for display
+      const ruleCounts = new Map<string, number>();
+      for (const issue of analysis.issues) {
+        ruleCounts.set(issue.axeRuleId, (ruleCounts.get(issue.axeRuleId) || 0) + 1);
+      }
+
+      const topIssues = uniqueIssues
         .slice(0, 5)
         .map((issue: {
           axeRuleId: string;
@@ -127,6 +143,7 @@ export async function POST(request: Request) {
           wcagLevel: issue.wcagLevel,
           htmlElement: issue.htmlElement,
           cssSelector: issue.cssSelector,
+          elementCount: ruleCounts.get(issue.axeRuleId) || 1,
         }));
 
       const counts = {
@@ -135,6 +152,7 @@ export async function POST(request: Request) {
         moderate: analysis.issues.filter((i: { severity: string }) => i.severity === "MODERATE").length,
         minor: analysis.issues.filter((i: { severity: string }) => i.severity === "MINOR").length,
         total: analysis.issues.length,
+        uniqueRules: uniqueIssues.length,
       };
 
       await prisma.quickScan.update({

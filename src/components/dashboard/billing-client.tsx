@@ -97,16 +97,19 @@ export function BillingClient({
     text: string;
   } | null>(null);
 
-  // Check URL params for status messages
+  const [upgrading, setUpgrading] = useState(false);
+
+  // Check URL params for status messages and auto-upgrade
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const status = params.get("status");
+    const upgradePlan = params.get("upgrade");
+
     if (status === "success") {
       setStatusMessage({
         type: "success",
         text: "Betaling geslaagd! Je plan wordt bijgewerkt.",
       });
-      // Clean URL
       window.history.replaceState({}, "", window.location.pathname);
     } else if (status === "method-updated") {
       setStatusMessage({
@@ -114,8 +117,44 @@ export function BillingClient({
         text: "Betaalmethode succesvol bijgewerkt.",
       });
       window.history.replaceState({}, "", window.location.pathname);
+    } else if (upgradePlan) {
+      // Auto-trigger checkout for the selected plan
+      window.history.replaceState({}, "", window.location.pathname);
+      const validPlans = ["starter", "professional", "bureau"];
+      if (validPlans.includes(upgradePlan.toLowerCase())) {
+        handleUpgrade(upgradePlan.toUpperCase());
+      }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function handleUpgrade(plan: string) {
+    setUpgrading(true);
+    setStatusMessage(null);
+    try {
+      const res = await fetch("/api/mollie/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planType: plan, interval: "monthly" }),
+      });
+      const data = await res.json();
+      if (data.success && data.data.checkoutUrl) {
+        window.location.href = data.data.checkoutUrl;
+      } else {
+        setStatusMessage({
+          type: "error",
+          text: data.error || "Kon de checkout niet starten. Probeer het opnieuw.",
+        });
+        setUpgrading(false);
+      }
+    } catch {
+      setStatusMessage({
+        type: "error",
+        text: "Er is een fout opgetreden bij het starten van de checkout.",
+      });
+      setUpgrading(false);
+    }
+  }
 
   const fetchBillingInfo = useCallback(async () => {
     try {
@@ -200,6 +239,21 @@ export function BillingClient({
           Beheer je abonnement en facturatie.
         </p>
       </div>
+
+      {/* Upgrade in progress */}
+      {upgrading && (
+        <Card>
+          <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
+            <Loader2 className="size-8 animate-spin text-primary" />
+            <div>
+              <p className="text-lg font-medium">Checkout wordt gestart...</p>
+              <p className="text-sm text-muted-foreground">
+                Je wordt doorgestuurd naar de betaalpagina.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Status messages */}
       {statusMessage && (

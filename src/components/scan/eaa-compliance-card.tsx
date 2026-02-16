@@ -174,8 +174,8 @@ export function EaaComplianceCard({
   }
 
   return (
-    <Card className={cn("overflow-hidden border", config.border)}>
-      <CardHeader className={cn("pb-4", config.bg)}>
+    <Card className={cn("overflow-hidden border pt-0 gap-0", config.border)}>
+      <CardHeader className={cn("px-6 py-5", config.bg)}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div

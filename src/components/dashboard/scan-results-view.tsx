@@ -202,6 +202,26 @@ export function ScanResultsView({ scan, eaaData }: { scan: ScanData; eaaData?: E
     });
   }, [scan.issues, severityFilter, wcagFilter, pageFilter, searchQuery]);
 
+  // Group filtered issues by axeRuleId for a cleaner overview
+  const groupedIssues = useMemo(() => {
+    const groups = new Map<string, { rule: ScanIssue; instances: ScanIssue[] }>();
+    for (const issue of filteredIssues) {
+      const existing = groups.get(issue.axeRuleId);
+      if (existing) {
+        existing.instances.push(issue);
+      } else {
+        groups.set(issue.axeRuleId, { rule: issue, instances: [issue] });
+      }
+    }
+    // Sort by severity (most severe first), then by instance count
+    const severityWeight: Record<Severity, number> = { CRITICAL: 0, SERIOUS: 1, MODERATE: 2, MINOR: 3 };
+    return Array.from(groups.values()).sort((a, b) => {
+      const sevDiff = severityWeight[a.rule.severity] - severityWeight[b.rule.severity];
+      if (sevDiff !== 0) return sevDiff;
+      return b.instances.length - a.instances.length;
+    });
+  }, [filteredIssues]);
+
   const uniquePages = useMemo(() => {
     const pages = new Set(scan.issues.map((i) => i.pageUrl));
     return Array.from(pages);
@@ -401,7 +421,7 @@ export function ScanResultsView({ scan, eaaData }: { scan: ScanData; eaaData?: E
           <Tabs defaultValue="issues" className="space-y-4">
             <TabsList>
               <TabsTrigger value="issues">
-                Issues ({scan.totalIssues})
+                Issues ({groupedIssues.length} typen, {scan.totalIssues} totaal)
               </TabsTrigger>
               <TabsTrigger value="pages">
                 Pagina&apos;s ({scan.scannedPages})
@@ -411,7 +431,7 @@ export function ScanResultsView({ scan, eaaData }: { scan: ScanData; eaaData?: E
             {/* Issues tab */}
             <TabsContent value="issues" className="space-y-4">
               {/* Filters */}
-              <div className="flex flex-col gap-3 sm:flex-row">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
@@ -466,8 +486,8 @@ export function ScanResultsView({ scan, eaaData }: { scan: ScanData; eaaData?: E
                 </div>
               </div>
 
-              {/* Issues list */}
-              {filteredIssues.length === 0 ? (
+              {/* Issues list — grouped by rule type */}
+              {groupedIssues.length === 0 ? (
                 <Card>
                   <CardContent className="py-8 text-center text-muted-foreground">
                     {scan.totalIssues === 0
@@ -477,15 +497,16 @@ export function ScanResultsView({ scan, eaaData }: { scan: ScanData; eaaData?: E
                 </Card>
               ) : (
                 <ul className="space-y-3">
-                  {filteredIssues.map((issue) => {
-                    const config = severityConfig[issue.severity];
+                  {groupedIssues.map(({ rule, instances }) => {
+                    const config = severityConfig[rule.severity];
                     const Icon = config.icon;
-                    const expanded = expandedIssues.has(issue.id);
+                    const expanded = expandedIssues.has(rule.axeRuleId);
+                    const count = instances.length;
 
                     return (
-                      <li key={issue.id}>
+                      <li key={rule.axeRuleId}>
                         <button
-                          onClick={() => toggleIssue(issue.id)}
+                          onClick={() => toggleIssue(rule.axeRuleId)}
                           className={cn(
                             "w-full rounded-lg border p-4 text-left transition-colors",
                             config.border,
@@ -507,23 +528,38 @@ export function ScanResultsView({ scan, eaaData }: { scan: ScanData; eaaData?: E
                                 >
                                   {config.label}
                                 </span>
-                                {issue.wcagCriteria.length > 0 && (
+                                {rule.wcagCriteria.length > 0 && (
                                   <span className="text-xs text-muted-foreground">
-                                    WCAG {issue.wcagCriteria.join(", ")}
+                                    WCAG {rule.wcagCriteria.join(", ")}
                                   </span>
                                 )}
-                                {issue.wcagLevel && (
+                                {rule.wcagLevel && (
                                   <Badge variant="outline" className="text-[10px] px-1 py-0">
-                                    {issue.wcagLevel}
+                                    {rule.wcagLevel}
+                                  </Badge>
+                                )}
+                                {count > 1 && (
+                                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                    {count}x
                                   </Badge>
                                 )}
                               </div>
                               <p className="mt-1 text-sm font-medium">
-                                {issue.description}
+                                {rule.description}
                               </p>
-                              <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                                {new URL(issue.pageUrl).pathname}
-                              </p>
+                              {count === 1 && (
+                                <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                  {new URL(rule.pageUrl).pathname}
+                                </p>
+                              )}
+                              {count > 1 && (
+                                <p className="mt-0.5 text-xs text-muted-foreground">
+                                  {count} elementen op{" "}
+                                  {new Set(instances.map((i) => i.pageUrl)).size === 1
+                                    ? new URL(instances[0].pageUrl).pathname
+                                    : `${new Set(instances.map((i) => i.pageUrl)).size} pagina's`}
+                                </p>
+                              )}
                             </div>
                             {expanded ? (
                               <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
@@ -536,7 +572,7 @@ export function ScanResultsView({ scan, eaaData }: { scan: ScanData; eaaData?: E
                         {expanded && (
                           <div
                             className={cn(
-                              "mt-1 rounded-b-lg border border-t-0 p-4 space-y-3",
+                              "mt-1 rounded-b-lg border border-t-0 p-4 space-y-4",
                               config.border,
                               config.bg
                             )}
@@ -546,7 +582,7 @@ export function ScanResultsView({ scan, eaaData }: { scan: ScanData; eaaData?: E
                               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                                 Waarom is dit belangrijk?
                               </p>
-                              <p className="mt-1 text-sm">{issue.helpText}</p>
+                              <p className="mt-1 text-sm">{rule.helpText}</p>
                             </div>
 
                             {/* Fix suggestion */}
@@ -554,45 +590,45 @@ export function ScanResultsView({ scan, eaaData }: { scan: ScanData; eaaData?: E
                               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                                 Hoe op te lossen
                               </p>
-                              <p className="mt-1 text-sm">{issue.fixSuggestion}</p>
+                              <p className="mt-1 text-sm">{rule.fixSuggestion}</p>
                             </div>
 
-                            {/* HTML element */}
-                            {issue.htmlElement && (
-                              <div>
-                                <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                                  <Code className="mr-1 inline size-3" />
-                                  HTML Element
-                                </p>
-                                <pre className="overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs">
-                                  {issue.htmlElement}
-                                </pre>
-                              </div>
-                            )}
-
-                            {/* CSS Selector */}
-                            {issue.cssSelector && (
-                              <div>
-                                <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                                  CSS Selector
-                                </p>
-                                <code className="rounded bg-muted px-2 py-1 font-mono text-xs">
-                                  {issue.cssSelector}
-                                </code>
-                              </div>
-                            )}
-
-                            {/* Page URL */}
+                            {/* Affected elements */}
                             <div>
-                              <a
-                                href={issue.pageUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                              >
-                                {issue.pageUrl}
-                                <ExternalLink className="size-3" />
-                              </a>
+                              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                <Code className="mr-1 inline size-3" />
+                                Getroffen elementen ({count})
+                              </p>
+                              <ul className="space-y-2">
+                                {instances.map((instance) => (
+                                  <li
+                                    key={instance.id}
+                                    className="rounded-md bg-muted/50 p-3 space-y-1"
+                                  >
+                                    {instance.htmlElement && (
+                                      <pre className="overflow-x-auto font-mono text-xs">
+                                        {instance.htmlElement}
+                                      </pre>
+                                    )}
+                                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                                      {instance.cssSelector && (
+                                        <code className="rounded bg-muted px-1.5 py-0.5 font-mono">
+                                          {instance.cssSelector}
+                                        </code>
+                                      )}
+                                      <a
+                                        href={instance.pageUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1 text-primary hover:underline"
+                                      >
+                                        {new URL(instance.pageUrl).pathname}
+                                        <ExternalLink className="size-3" />
+                                      </a>
+                                    </div>
+                                  </li>
+                                ))}
+                              </ul>
                             </div>
                           </div>
                         )}

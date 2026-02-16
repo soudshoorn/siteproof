@@ -101,6 +101,7 @@ export async function registerAction(formData: FormData): Promise<AuthResult> {
   const email = (formData.get("email") as string)?.trim();
   const password = formData.get("password") as string;
   const confirmPassword = formData.get("confirmPassword") as string;
+  const plan = (formData.get("plan") as string)?.trim().toLowerCase() || "";
 
   if (!email || !password) {
     return { error: "Vul alle verplichte velden in." };
@@ -114,13 +115,16 @@ export async function registerAction(formData: FormData): Promise<AuthResult> {
     return { error: "Wachtwoorden komen niet overeen." };
   }
 
+  const validPlans = ["starter", "professional", "bureau"];
+  const selectedPlan = validPlans.includes(plan) ? plan : "";
+
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
       data: { full_name: fullName },
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`,
+      emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback${selectedPlan ? `?plan=${selectedPlan}` : ""}`,
     },
   });
 
@@ -134,11 +138,14 @@ export async function registerAction(formData: FormData): Promise<AuthResult> {
   // If email confirmation is disabled, user is immediately logged in
   if (data.user && data.session) {
     await syncUser(data.user.id, data.user.email!, fullName);
+    // Redirect to checkout if a paid plan was selected
+    if (selectedPlan) {
+      redirect(`/dashboard/settings/billing?upgrade=${selectedPlan}`);
+    }
     redirect("/dashboard");
   }
 
   // Email confirmation enabled — show check-email message
-  // We redirect to a confirmation page
   redirect("/auth/verify");
 }
 
