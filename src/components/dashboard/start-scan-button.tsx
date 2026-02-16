@@ -41,7 +41,7 @@ export function StartScanButton({
         return;
       }
 
-      toast.success("Scan gestart!");
+      toast.success("Scan voltooid!");
       router.push(`/dashboard/scans/${data.data.id}`);
     } catch {
       toast.error(nl.scan.scanFailed);
@@ -60,7 +60,7 @@ export function StartScanButton({
       {loading ? (
         <>
           <Loader2 className="size-4 animate-spin" />
-          Starten...
+          Scan wordt uitgevoerd...
         </>
       ) : (
         <>

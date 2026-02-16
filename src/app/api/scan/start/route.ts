@@ -54,28 +54,12 @@ export const POST = withErrorHandling(async (request: Request) => {
     },
   });
 
-  // Fire off the scan to Railway in the background
-  processScanAsync(scan.id, website.url, maxPages).catch((error) => {
-    console.error(`[Scan] Background scan ${scan.id} failed:`, error);
-  });
-
-  return jsonSuccess({ id: scan.id, status: "QUEUED" }, 201);
-});
-
-/**
- * Run the full scan via Railway scanner service.
- * Updates the database with results as it progresses.
- */
-async function processScanAsync(
-  scanId: string,
-  url: string,
-  maxPages: number
-): Promise<void> {
+  // Run scan synchronously — Vercel kills background work after response is sent
   const startTime = Date.now();
 
   try {
     await prisma.scan.update({
-      where: { id: scanId },
+      where: { id: scan.id },
       data: { status: "SCANNING" },
     });
 
@@ -85,8 +69,8 @@ async function processScanAsync(
         "Content-Type": "application/json",
         ...(SCANNER_SECRET ? { Authorization: `Bearer ${SCANNER_SECRET}` } : {}),
       },
-      body: JSON.stringify({ url, maxPages }),
-      signal: AbortSignal.timeout(maxPages * 35_000), // ~35s per page
+      body: JSON.stringify({ url: website.url, maxPages }),
+      signal: AbortSignal.timeout(maxPages * 35_000),
     });
 
     const scanData = await scanResponse.json();
@@ -102,7 +86,7 @@ async function processScanAsync(
       if (page.error) {
         await prisma.pageResult.create({
           data: {
-            scanId,
+            scanId: scan.id,
             url: page.url,
             title: null,
             score: null,
@@ -115,7 +99,7 @@ async function processScanAsync(
 
       const pageResult = await prisma.pageResult.create({
         data: {
-          scanId,
+          scanId: scan.id,
           url: page.url,
           title: page.title,
           score: page.score,
@@ -139,7 +123,7 @@ async function processScanAsync(
             cssSelector: string | null;
             pageUrl: string;
           }) => ({
-            scanId,
+            scanId: scan.id,
             pageResultId: pageResult.id,
             axeRuleId: issue.axeRuleId,
             severity: issue.severity as "CRITICAL" | "SERIOUS" | "MODERATE" | "MINOR",
@@ -161,7 +145,7 @@ async function processScanAsync(
 
     // Finalize scan
     await prisma.scan.update({
-      where: { id: scanId },
+      where: { id: scan.id },
       data: {
         status: "COMPLETED",
         score: result.score,
@@ -176,12 +160,18 @@ async function processScanAsync(
         completedAt: new Date(),
       },
     });
+
+    return jsonSuccess({
+      id: scan.id,
+      status: "COMPLETED",
+      score: result.score,
+    }, 201);
   } catch (error) {
     const duration = Math.round((Date.now() - startTime) / 1000);
     const errorMessage = error instanceof Error ? error.message : String(error);
 
     await prisma.scan.update({
-      where: { id: scanId },
+      where: { id: scan.id },
       data: {
         status: "FAILED",
         errorMessage,
@@ -189,7 +179,9 @@ async function processScanAsync(
         completedAt: new Date(),
       },
     });
-  }
-}
 
-export const maxDuration = 300; // 5 minutes for full scans (Vercel Pro)
+    return jsonError(`Scan mislukt: ${errorMessage}`, 422);
+  }
+});
+
+export const maxDuration = 300; // 5 minutes for full scans
