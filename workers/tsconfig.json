@@ -3,7 +3,7 @@
     "target": "ES2020",
     "module": "commonjs",
     "lib": ["ES2020"],
-    "outDir": "../dist/workers",
+    "outDir": "../dist",
     "rootDir": "..",
     "strict": true,
     "esModuleInterop": true,
@@ -16,9 +16,8 @@
     "baseUrl": ".."
   },
   "include": [
-    "./**/*.ts",
-    "../src/lib/scanner/**/*.ts",
-    "../src/lib/eaa/**/*.ts"
+    "./server.ts",
+    "../src/lib/scanner/**/*.ts"
   ],
   "exclude": ["../node_modules"]
 }
