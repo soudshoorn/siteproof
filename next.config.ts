@@ -15,7 +15,7 @@ const nextConfig: NextConfig = {
     "@prisma/client",
     "@prisma/adapter-pg",
     "pg",
-    "jsdom",
+    "happy-dom",
     "axe-core",
   ],
   poweredByHeader: false,

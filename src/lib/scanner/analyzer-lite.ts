@@ -1,4 +1,4 @@
-import { JSDOM } from "jsdom";
+import { Window } from "happy-dom";
 import axe from "axe-core";
 import type { IssueSeverity, IssueImpact } from "@prisma/client";
 import { getTranslation } from "./translations/nl";
@@ -31,7 +31,7 @@ export interface LiteAnalyzedIssue {
 
 /**
  * Lightweight page analyzer that works on Vercel serverless.
- * Uses fetch + jsdom + axe-core instead of Puppeteer.
+ * Uses fetch + happy-dom + axe-core instead of Puppeteer.
  *
  * Limitations vs full scanner:
  * - No JavaScript execution (SPA content won't be analyzed)
@@ -80,18 +80,14 @@ export async function analyzePageLite(url: string): Promise<LitePageAnalysis> {
     clearTimeout(timeout);
   }
 
-  // Create a jsdom instance
-  const dom = new JSDOM(html, {
-    url: finalUrl,
-    runScripts: "outside-only",
-    pretendToBeVisual: true,
-    resources: "usable",
-  });
+  // Create a happy-dom window
+  const window = new Window({ url: finalUrl });
+  window.document.write(html);
 
-  const { document } = dom.window;
+  const document = window.document;
   const title = document.title || null;
 
-  // Run axe-core on the jsdom document
+  // Run axe-core on the happy-dom document
   let axeResults;
   try {
     axeResults = await axe.run(document.documentElement as unknown as axe.ElementContext, {
@@ -109,7 +105,7 @@ export async function analyzePageLite(url: string): Promise<LitePageAnalysis> {
       resultTypes: ["violations"],
     });
   } finally {
-    dom.window.close();
+    window.close();
   }
 
   const loadTime = Date.now() - startTime;
