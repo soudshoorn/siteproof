@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -130,12 +131,58 @@ const severityConfig: Record<
 const severityOrder: Severity[] = ["CRITICAL", "SERIOUS", "MODERATE", "MINOR"];
 
 export function ScanResultsView({ scan, eaaData }: { scan: ScanData; eaaData?: EaaData }) {
+  const router = useRouter();
+  const [pollData, setPollData] = useState<{
+    status: string;
+    scannedPages: number;
+    totalPages: number;
+  } | null>(null);
   const [severityFilter, setSeverityFilter] = useState<Severity | "ALL">("ALL");
   const [wcagFilter, setWcagFilter] = useState<string>("ALL");
   const [pageFilter, setPageFilter] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedIssues, setExpandedIssues] = useState<Set<string>>(new Set());
   const [exportingPdf, setExportingPdf] = useState(false);
+
+  // Poll for scan status updates when scan is in progress
+  const isInitiallyInProgress = scan.status !== "COMPLETED" && scan.status !== "FAILED";
+
+  const pollStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/scan/${scan.id}/status`);
+      if (!res.ok) return;
+      const json = await res.json();
+      if (!json.success) return;
+      const data = json.data;
+
+      setPollData({
+        status: data.status,
+        scannedPages: data.scannedPages,
+        totalPages: data.totalPages,
+      });
+
+      if (data.status === "COMPLETED" || data.status === "FAILED") {
+        // Reload the page to get full results from the server component
+        router.refresh();
+      }
+    } catch {
+      // Polling failure is non-critical
+    }
+  }, [scan.id, router]);
+
+  useEffect(() => {
+    if (!isInitiallyInProgress) return;
+
+    // Poll immediately, then every 3 seconds
+    pollStatus();
+    const interval = setInterval(pollStatus, 3000);
+    return () => clearInterval(interval);
+  }, [isInitiallyInProgress, pollStatus]);
+
+  // Use polled data for progress display if available
+  const displayStatus = pollData?.status ?? scan.status;
+  const displayScannedPages = pollData?.scannedPages ?? scan.scannedPages;
+  const displayTotalPages = pollData?.totalPages ?? scan.totalPages;
 
   const filteredIssues = useMemo(() => {
     return scan.issues.filter((issue) => {
@@ -202,7 +249,7 @@ export function ScanResultsView({ scan, eaaData }: { scan: ScanData; eaaData?: E
   }
 
   const isInProgress =
-    scan.status !== "COMPLETED" && scan.status !== "FAILED";
+    displayStatus !== "COMPLETED" && displayStatus !== "FAILED";
 
   return (
     <div className="space-y-8">
@@ -261,11 +308,11 @@ export function ScanResultsView({ scan, eaaData }: { scan: ScanData; eaaData?: E
             <div>
               <p className="text-lg font-medium">{nl.dashboard.scanInProgress}</p>
               <p className="text-sm text-muted-foreground">
-                {scan.scannedPages} van {scan.totalPages || "?"}{" "}
+                {displayScannedPages} van {displayTotalPages || "?"}{" "}
                 {nl.dashboard.pagesScanned}
               </p>
             </div>
-            <Badge variant="secondary">{scan.status}</Badge>
+            <Badge variant="secondary">{displayStatus}</Badge>
           </CardContent>
         </Card>
       )}
