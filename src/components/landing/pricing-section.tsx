@@ -55,7 +55,8 @@ const tiers = [
       { label: `10 ${nl.pricing.websites.toLowerCase()}`, included: true },
       { label: `500 ${nl.pricing.pagesPerScan.toLowerCase()}`, included: true },
       { label: nl.pricing.daily, included: true },
-      { label: nl.pricing.pdfWhiteLabel, included: true },
+      { label: "PDF export", included: true },
+      { label: "White-label", included: true, comingSoon: true },
       { label: nl.pricing.emailAlerts, included: true },
       { label: nl.pricing.eaaStatement, included: true },
       { label: nl.pricing.prioritySupport, included: true },
@@ -72,9 +73,10 @@ const tiers = [
       { label: `50 ${nl.pricing.websites.toLowerCase()}`, included: true },
       { label: `500 ${nl.pricing.pagesPerScan.toLowerCase()}`, included: true },
       { label: nl.pricing.daily, included: true },
-      { label: nl.pricing.pdfWhiteLabelApi, included: true },
+      { label: "PDF export", included: true },
+      { label: "White-label", included: true, comingSoon: true },
       { label: nl.pricing.emailAlerts, included: true },
-      { label: nl.pricing.apiAccess, included: true },
+      { label: nl.pricing.apiAccess, included: true, comingSoon: true },
       { label: `${nl.pricing.unlimited} teamleden`, included: true },
     ],
   },
@@ -193,8 +195,16 @@ export function PricingSection({ isLoggedIn = false }: { isLoggedIn?: boolean })
                       ) : (
                         <X className="mt-0.5 size-4 shrink-0 text-muted-foreground/40" />
                       )}
-                      <span className={feature.included ? "" : "text-muted-foreground/60"}>
+                      <span className={cn(
+                        feature.included ? "" : "text-muted-foreground/60",
+                        "flex items-center gap-1.5"
+                      )}>
                         {feature.label}
+                        {feature.comingSoon && (
+                          <Badge variant="outline" className="px-1.5 py-0 text-[10px] font-normal text-muted-foreground">
+                            soon
+                          </Badge>
+                        )}
                       </span>
                     </li>
                   ))}

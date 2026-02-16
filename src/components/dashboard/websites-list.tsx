@@ -130,7 +130,7 @@ export function WebsitesList({
                       <ScoreCircle score={lastScan.score} size="sm" animated={false} />
                       <div className="flex flex-wrap gap-4 text-sm">
                         <div>
-                          <p className="text-muted-foreground">Issues</p>
+                          <p className="text-muted-foreground">Problemen</p>
                           <p className="font-medium">{lastScan.totalIssues}</p>
                         </div>
                         {lastScan.criticalIssues > 0 && (

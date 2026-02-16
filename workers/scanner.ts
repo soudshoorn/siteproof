@@ -96,11 +96,7 @@ async function processScanJob(data: ScanJobData): Promise<void> {
       loadTime: number;
     }> = [];
 
-    let totalCritical = 0;
-    let totalSerious = 0;
-    let totalModerate = 0;
-    let totalMinor = 0;
-    let totalIssues = 0;
+    const uniqueRules = new Map<string, string>(); // axeRuleId -> severity
     let pagesCompleted = 0;
     let failedPages = 0;
 
@@ -193,14 +189,10 @@ async function processScanJob(data: ScanJobData): Promise<void> {
           const analysis = result.value;
 
           for (const issue of analysis.issues) {
-            switch (issue.severity) {
-              case "CRITICAL": totalCritical++; break;
-              case "SERIOUS": totalSerious++; break;
-              case "MODERATE": totalModerate++; break;
-              case "MINOR": totalMinor++; break;
+            if (!uniqueRules.has(issue.axeRuleId)) {
+              uniqueRules.set(issue.axeRuleId, issue.severity);
             }
           }
-          totalIssues += analysis.issues.length;
 
           pageResults.push({
             url: analysis.url,
@@ -242,6 +234,17 @@ async function processScanJob(data: ScanJobData): Promise<void> {
       ? `${failedPages} van ${pagesToScan.length} pagina's konden niet worden gescand (timeout of niet bereikbaar).`
       : null;
 
+    // Count unique rules per severity
+    let totalCritical = 0, totalSerious = 0, totalModerate = 0, totalMinor = 0;
+    for (const severity of uniqueRules.values()) {
+      switch (severity) {
+        case "CRITICAL": totalCritical++; break;
+        case "SERIOUS": totalSerious++; break;
+        case "MODERATE": totalModerate++; break;
+        case "MINOR": totalMinor++; break;
+      }
+    }
+
     // Finalize scan — COMPLETED even if some pages failed (partial results are still useful)
     await prisma.scan.update({
       where: { id: scanId },
@@ -250,7 +253,7 @@ async function processScanJob(data: ScanJobData): Promise<void> {
         score: overallScore,
         totalPages: pagesToScan.length,
         scannedPages: pagesToScan.length,
-        totalIssues,
+        totalIssues: uniqueRules.size,
         criticalIssues: totalCritical,
         seriousIssues: totalSerious,
         moderateIssues: totalModerate,
@@ -264,7 +267,7 @@ async function processScanJob(data: ScanJobData): Promise<void> {
     console.log(
       `[Scanner] Scan ${scanId} completed: score=${overallScore}, ` +
         `pages=${scoredPages.length}/${pagesToScan.length} (${failedPages} failed), ` +
-        `issues=${totalIssues}, duration=${duration}s`
+        `unique issues=${uniqueRules.size}, duration=${duration}s`
     );
 
     // Send email notifications (scan completed, score drop, critical issues)

@@ -169,11 +169,7 @@ app.post("/scan/full", async (req: Request, res: Response) => {
       issues: Array<unknown>;
       error?: string;
     }> = [];
-    let totalCritical = 0;
-    let totalSerious = 0;
-    let totalModerate = 0;
-    let totalMinor = 0;
-    let totalIssues = 0;
+    const uniqueRulesSync = new Map<string, string>();
 
     for (let i = 0; i < pagesToScan.length; i += SCAN_CONCURRENCY) {
       const batch = pagesToScan.slice(i, i + SCAN_CONCURRENCY);
@@ -198,14 +194,10 @@ app.post("/scan/full", async (req: Request, res: Response) => {
         if (value.success) {
           const analysis = value.analysis;
           for (const issue of analysis.issues) {
-            switch (issue.severity) {
-              case "CRITICAL": totalCritical++; break;
-              case "SERIOUS": totalSerious++; break;
-              case "MODERATE": totalModerate++; break;
-              case "MINOR": totalMinor++; break;
+            if (!uniqueRulesSync.has(issue.axeRuleId)) {
+              uniqueRulesSync.set(issue.axeRuleId, issue.severity);
             }
           }
-          totalIssues += analysis.issues.length;
           pageResults.push({
             url: analysis.url,
             title: analysis.title,
@@ -228,7 +220,7 @@ app.post("/scan/full", async (req: Request, res: Response) => {
       }
     }
 
-    // Phase 3: Calculate overall score
+    // Phase 3: Calculate overall score + unique issue counts
     const scoredPages = pageResults.filter((p) => p.score !== null);
     const overallScore =
       scoredPages.length > 0
@@ -243,17 +235,28 @@ app.post("/scan/full", async (req: Request, res: Response) => {
     const duration = Date.now() - startTime;
     const failedPages = pageResults.filter((p) => p.error).length;
 
+    // Count unique rules per severity
+    let syncCritical = 0, syncSerious = 0, syncModerate = 0, syncMinor = 0;
+    for (const severity of uniqueRulesSync.values()) {
+      switch (severity) {
+        case "CRITICAL": syncCritical++; break;
+        case "SERIOUS": syncSerious++; break;
+        case "MODERATE": syncModerate++; break;
+        case "MINOR": syncMinor++; break;
+      }
+    }
+
     res.json({
       success: true,
       data: {
         url,
         score: overallScore,
         totalPages: pagesToScan.length,
-        totalIssues,
-        criticalIssues: totalCritical,
-        seriousIssues: totalSerious,
-        moderateIssues: totalModerate,
-        minorIssues: totalMinor,
+        totalIssues: uniqueRulesSync.size,
+        criticalIssues: syncCritical,
+        seriousIssues: syncSerious,
+        moderateIssues: syncModerate,
+        minorIssues: syncMinor,
         duration,
         failedPages,
         crawlErrors: crawlResult.errors,
@@ -334,13 +337,11 @@ async function runAsyncScan(scanId: string, url: string, maxPages: number): Prom
       data: { status: "SCANNING", totalPages: pagesToScan.length, scannedPages: 0 },
     });
 
-    let totalCritical = 0;
-    let totalSerious = 0;
-    let totalModerate = 0;
-    let totalMinor = 0;
-    let totalIssues = 0;
+    // Track unique rule types across all pages (for summary counts)
+    const uniqueRules = new Map<string, string>(); // axeRuleId -> severity
     let pagesCompleted = 0;
     let failedPages = 0;
+    let totalElementViolations = 0;
     const scoredPages: Array<{ score: number; issueCount: number }> = [];
 
     for (let i = 0; i < pagesToScan.length; i += SCAN_CONCURRENCY) {
@@ -411,15 +412,14 @@ async function runAsyncScan(scanId: string, url: string, maxPages: number): Prom
         pagesCompleted++;
         if (result.status === "fulfilled" && result.value) {
           const analysis = result.value;
+          totalElementViolations += analysis.issues.length;
+          // Track unique rules (keep highest severity per rule)
           for (const issue of analysis.issues) {
-            switch (issue.severity) {
-              case "CRITICAL": totalCritical++; break;
-              case "SERIOUS": totalSerious++; break;
-              case "MODERATE": totalModerate++; break;
-              case "MINOR": totalMinor++; break;
+            const existing = uniqueRules.get(issue.axeRuleId);
+            if (!existing) {
+              uniqueRules.set(issue.axeRuleId, issue.severity);
             }
           }
-          totalIssues += analysis.issues.length;
           scoredPages.push({ score: analysis.score, issueCount: analysis.issues.length });
         } else {
           failedPages++;
@@ -433,10 +433,24 @@ async function runAsyncScan(scanId: string, url: string, maxPages: number): Prom
       }).catch(() => {});
     }
 
-    // Phase 3: Finalize
+    // Phase 3: Finalize — count unique rule types per severity
     const overallScore = scoredPages.length > 0
       ? calculateOverallScore(scoredPages)
       : 0;
+
+    let totalCritical = 0;
+    let totalSerious = 0;
+    let totalModerate = 0;
+    let totalMinor = 0;
+    for (const severity of uniqueRules.values()) {
+      switch (severity) {
+        case "CRITICAL": totalCritical++; break;
+        case "SERIOUS": totalSerious++; break;
+        case "MODERATE": totalModerate++; break;
+        case "MINOR": totalMinor++; break;
+      }
+    }
+    const totalUniqueIssues = uniqueRules.size;
 
     const duration = Math.round((Date.now() - startTime) / 1000);
     const errorMessage = failedPages > 0
@@ -450,7 +464,7 @@ async function runAsyncScan(scanId: string, url: string, maxPages: number): Prom
         score: overallScore,
         totalPages: pagesToScan.length,
         scannedPages: pagesToScan.length,
-        totalIssues,
+        totalIssues: totalUniqueIssues,
         criticalIssues: totalCritical,
         seriousIssues: totalSerious,
         moderateIssues: totalModerate,
@@ -463,7 +477,8 @@ async function runAsyncScan(scanId: string, url: string, maxPages: number): Prom
 
     console.log(
       `[Scanner] Scan ${scanId} completed: score=${overallScore}, ` +
-      `pages=${scoredPages.length}/${pagesToScan.length}, issues=${totalIssues}, duration=${duration}s`
+      `pages=${scoredPages.length}/${pagesToScan.length}, ` +
+      `unique issues=${totalUniqueIssues} (${totalElementViolations} elements), duration=${duration}s`
     );
   } catch (error) {
     const duration = Math.round((Date.now() - startTime) / 1000);
