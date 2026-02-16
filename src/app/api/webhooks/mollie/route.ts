@@ -1,4 +1,5 @@
 import { getMollieClient, isMollieConfigured } from "@/lib/mollie/client";
+import { prisma } from "@/lib/db";
 import {
   createSubscription,
   extendSubscriptionPeriod,
@@ -6,6 +7,13 @@ import {
   handleCancellation,
 } from "@/lib/mollie/webhooks";
 import type { PlanKey } from "@/lib/mollie/plans";
+
+interface PaymentMetadata {
+  organizationId: string;
+  planType: PlanKey;
+  interval: "monthly" | "yearly";
+  isMethodUpdate?: boolean;
+}
 
 /**
  * POST /api/webhooks/mollie
@@ -33,32 +41,63 @@ export async function POST(request: Request) {
     // Always fetch the payment to verify — never trust the webhook body
     const payment = await mollieClient.payments.get(paymentId);
 
-    // Parse metadata (stored as JSON string)
-    let metadata: {
-      organizationId: string;
-      planType: PlanKey;
-      interval: "monthly" | "yearly";
-    };
+    // Parse metadata (stored as JSON string on the payment)
+    let metadata: PaymentMetadata | null = null;
 
     try {
-      metadata =
+      const raw =
         typeof payment.metadata === "string"
           ? JSON.parse(payment.metadata)
           : payment.metadata;
+      if (raw?.organizationId) {
+        metadata = raw as PaymentMetadata;
+      }
     } catch {
-      console.error("Invalid payment metadata:", payment.metadata);
-      return new Response("Ongeldige metadata", { status: 400 });
+      // Metadata parsing failed — fall through to subscription lookup
+    }
+
+    // If no metadata with organizationId, this might be a recurring
+    // subscription payment where Mollie doesn't carry our metadata.
+    // Look up the organization via customerId instead.
+    if (!metadata?.organizationId && payment.subscriptionId && payment.customerId) {
+      try {
+        const org = await prisma.organization.findFirst({
+          where: { mollieCustomerId: payment.customerId as string },
+          select: { id: true, planType: true },
+        });
+
+        if (org) {
+          // Determine interval from the subscription object
+          const subscription = await mollieClient.customerSubscriptions.get(
+            payment.subscriptionId,
+            { customerId: payment.customerId as string }
+          );
+          const interval =
+            subscription.interval === "12 months" ? "yearly" as const : "monthly" as const;
+
+          metadata = {
+            organizationId: org.id,
+            planType: org.planType as PlanKey,
+            interval,
+          };
+        }
+      } catch (err) {
+        console.error("Failed to look up subscription payment:", err);
+      }
     }
 
     if (!metadata?.organizationId) {
-      // Payment without our metadata — might be a subscription payment
-      // Check if it has subscriptionId
-      console.warn("Payment without organizationId in metadata:", paymentId);
+      console.warn("Payment without organizationId — cannot process:", paymentId);
       return new Response("OK", { status: 200 });
     }
 
     switch (payment.status) {
       case "paid": {
+        // Payment method updates: just acknowledge, don't create/modify subscription
+        if (metadata.isMethodUpdate) {
+          break;
+        }
+
         if (payment.sequenceType === "first") {
           // First payment successful → create subscription for recurring billing
           await createSubscription({
@@ -78,9 +117,11 @@ export async function POST(request: Request) {
       case "failed":
       case "expired": {
         // Payment failed — start grace period, send reminder
-        await handleFailedPayment({
-          organizationId: metadata.organizationId,
-        });
+        if (!metadata.isMethodUpdate) {
+          await handleFailedPayment({
+            organizationId: metadata.organizationId,
+          });
+        }
         break;
       }
 

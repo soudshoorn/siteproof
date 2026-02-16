@@ -119,23 +119,25 @@ export function BillingClient({
       window.history.replaceState({}, "", window.location.pathname);
     } else if (upgradePlan) {
       // Auto-trigger checkout for the selected plan
+      const intervalParam = params.get("interval");
       window.history.replaceState({}, "", window.location.pathname);
       const validPlans = ["starter", "professional", "bureau"];
       if (validPlans.includes(upgradePlan.toLowerCase())) {
-        handleUpgrade(upgradePlan.toUpperCase());
+        const interval = intervalParam === "yearly" ? "yearly" : "monthly";
+        handleUpgrade(upgradePlan.toUpperCase(), interval);
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function handleUpgrade(plan: string) {
+  async function handleUpgrade(plan: string, interval: "monthly" | "yearly" = "monthly") {
     setUpgrading(true);
     setStatusMessage(null);
     try {
       const res = await fetch("/api/mollie/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planType: plan, interval: "monthly" }),
+        body: JSON.stringify({ planType: plan, interval }),
       });
       const data = await res.json();
       if (data.success && data.data.checkoutUrl) {

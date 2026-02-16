@@ -1,6 +1,10 @@
 import { getMollieClient } from "./client";
 import { PLANS, type PlanKey } from "./plans";
 import { prisma } from "@/lib/db";
+import { sendEmail } from "@/lib/email/client";
+import { baseEmailLayout, emailButton } from "@/lib/email/templates/base";
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://siteproof.nl";
 
 /**
  * After a successful "first" payment, create a Mollie subscription
@@ -27,8 +31,8 @@ export async function createSubscription(payment: {
     amount: { currency: "EUR", value: priceFormatted },
     interval: mollieInterval,
     description: `SiteProof ${plan.name} abonnement (${interval === "yearly" ? "jaarlijks" : "maandelijks"})`,
-    webhookUrl: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/mollie`,
-    metadata: JSON.stringify({ organizationId, planType }),
+    webhookUrl: `${APP_URL}/api/webhooks/mollie`,
+    metadata: JSON.stringify({ organizationId, planType, interval }),
   });
 
   // Calculate period end
@@ -50,6 +54,11 @@ export async function createSubscription(payment: {
       maxPagesPerScan: plan.maxPagesPerScan,
     },
   });
+
+  // Send confirmation email (non-blocking)
+  sendSubscriptionEmail(organizationId, plan.name, priceFormatted, interval, periodEnd).catch(
+    (err) => console.error("[Webhook] Failed to send subscription confirmation:", err)
+  );
 
   return subscription;
 }
@@ -85,15 +94,53 @@ export async function extendSubscriptionPeriod(metadata: {
 
 /**
  * Handle a failed payment. Don't downgrade immediately — give a grace period.
+ * The cron job checks for expired periods and downgrades after 7 days.
  */
 export async function handleFailedPayment(metadata: {
   organizationId: string;
 }) {
-  // TODO: Send reminder email via Resend
-  // Grace period: 7 days after mollieCurrentPeriodEnd before downgrade
-  // This is handled by the cron job that checks expired subscriptions
-  console.error(
-    `Payment failed for organization ${metadata.organizationId}. Grace period started.`
+  const org = await prisma.organization.findUnique({
+    where: { id: metadata.organizationId },
+    include: {
+      members: {
+        where: { role: "OWNER" },
+        include: { user: { select: { email: true, fullName: true } } },
+      },
+    },
+  });
+
+  if (!org) return;
+
+  const owner = org.members[0]?.user;
+  if (!owner) return;
+
+  const periodEnd = org.mollieCurrentPeriodEnd
+    ? org.mollieCurrentPeriodEnd.toLocaleDateString("nl-NL")
+    : "binnenkort";
+
+  const content = `
+    <h1 style="color: #f5f5f5; font-size: 22px; font-weight: 700; margin: 0 0 8px;">Betaling mislukt</h1>
+    <p style="color: #a3a3a3; font-size: 15px; margin: 0 0 24px; line-height: 1.6;">
+      De automatische betaling voor je <strong style="color: #f5f5f5;">${org.planType}</strong> abonnement is mislukt.
+      Je plan blijft actief tot <strong style="color: #f5f5f5;">${periodEnd}</strong>.
+    </p>
+    <p style="color: #a3a3a3; font-size: 14px; margin: 0 0 24px; line-height: 1.6;">
+      Controleer of je betaalmethode nog geldig is en probeer het opnieuw via je facturatie-instellingen.
+      Als de betaling niet lukt, wordt je account na de huidige periode overgezet naar het gratis plan.
+    </p>
+    ${emailButton("Betaalmethode bijwerken", `${APP_URL}/dashboard/settings/billing`)}
+  `;
+
+  await sendEmail({
+    to: owner.email,
+    subject: "Betaling mislukt — actie vereist",
+    html: baseEmailLayout({
+      title: "Betaling mislukt",
+      preheader: "Je automatische betaling is mislukt. Werk je betaalmethode bij.",
+      content,
+    }),
+  }).catch((err) =>
+    console.error("[Webhook] Failed to send payment failed email:", err)
   );
 }
 
@@ -139,4 +186,58 @@ export async function downgradeToFree(organizationId: string) {
  */
 export function formatMollieAmount(cents: number): string {
   return (cents / 100).toFixed(2);
+}
+
+// -------------------------------------------------------------------
+// Email helpers
+// -------------------------------------------------------------------
+
+async function sendSubscriptionEmail(
+  organizationId: string,
+  planName: string,
+  price: string,
+  interval: "monthly" | "yearly",
+  periodEnd: Date
+) {
+  const members = await prisma.organizationMember.findMany({
+    where: { organizationId },
+    include: { user: { select: { email: true, fullName: true } } },
+  });
+
+  const intervalLabel = interval === "yearly" ? "jaarlijks" : "maandelijks";
+  const nextDate = periodEnd.toLocaleDateString("nl-NL");
+
+  for (const member of members) {
+    const content = `
+      <h1 style="color: #f5f5f5; font-size: 22px; font-weight: 700; margin: 0 0 8px;">Abonnement bevestigd</h1>
+      <p style="color: #a3a3a3; font-size: 15px; margin: 0 0 24px; line-height: 1.6;">
+        Bedankt${member.user.fullName ? `, ${member.user.fullName}` : ""}! Je bent geüpgraded naar het <strong style="color: #14B8A6;">${planName}</strong> plan.
+      </p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #1a1a1a; border-radius: 8px; margin-bottom: 24px;">
+        <tr><td style="padding: 16px 24px; border-bottom: 1px solid #2a2a2a;">
+          <p style="color: #a3a3a3; font-size: 12px; margin: 0 0 4px;">Plan</p>
+          <p style="color: #f5f5f5; font-size: 16px; font-weight: 600; margin: 0;">${planName}</p>
+        </td></tr>
+        <tr><td style="padding: 16px 24px; border-bottom: 1px solid #2a2a2a;">
+          <p style="color: #a3a3a3; font-size: 12px; margin: 0 0 4px;">Prijs</p>
+          <p style="color: #f5f5f5; font-size: 16px; font-weight: 600; margin: 0;">€${price} (${intervalLabel})</p>
+        </td></tr>
+        <tr><td style="padding: 16px 24px;">
+          <p style="color: #a3a3a3; font-size: 12px; margin: 0 0 4px;">Volgende factuurdatum</p>
+          <p style="color: #f5f5f5; font-size: 16px; font-weight: 600; margin: 0;">${nextDate}</p>
+        </td></tr>
+      </table>
+      ${emailButton("Ga naar je dashboard", `${APP_URL}/dashboard`)}
+    `;
+
+    await sendEmail({
+      to: member.user.email,
+      subject: `Abonnement bevestigd: SiteProof ${planName}`,
+      html: baseEmailLayout({
+        title: `Abonnement bevestigd — ${planName}`,
+        preheader: `Je SiteProof ${planName} abonnement is actief.`,
+        content,
+      }),
+    });
+  }
 }

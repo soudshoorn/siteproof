@@ -431,8 +431,8 @@ export function ScanResultsView({ scan, eaaData }: { scan: ScanData; eaaData?: E
             {/* Issues tab */}
             <TabsContent value="issues" className="space-y-4">
               {/* Filters */}
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <div className="relative flex-1">
+              <div className="grid gap-3 grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto]">
+                <div className="relative">
                   <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     placeholder="Zoek in issues..."
@@ -441,49 +441,47 @@ export function ScanResultsView({ scan, eaaData }: { scan: ScanData; eaaData?: E
                     className="pl-9"
                   />
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <select
+                  value={severityFilter}
+                  onChange={(e) => setSeverityFilter(e.target.value as Severity | "ALL")}
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                  aria-label={nl.dashboard.filterBySeverity}
+                >
+                  <option value="ALL">Alle niveaus</option>
+                  {severityOrder.map((s) => (
+                    <option key={s} value={s}>
+                      {severityConfig[s].label}
+                    </option>
+                  ))}
+                </select>
+                {uniqueWcagCriteria.length > 0 && (
                   <select
-                    value={severityFilter}
-                    onChange={(e) => setSeverityFilter(e.target.value as Severity | "ALL")}
+                    value={wcagFilter}
+                    onChange={(e) => setWcagFilter(e.target.value)}
                     className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                    aria-label={nl.dashboard.filterBySeverity}
+                    aria-label={nl.dashboard.filterByWcag}
                   >
-                    <option value="ALL">Alle niveaus</option>
-                    {severityOrder.map((s) => (
-                      <option key={s} value={s}>
-                        {severityConfig[s].label}
+                    <option value="ALL">Alle WCAG criteria</option>
+                    {uniqueWcagCriteria.map((c) => (
+                      <option key={c} value={c}>
+                        WCAG {c}
                       </option>
                     ))}
                   </select>
-                  {uniqueWcagCriteria.length > 0 && (
-                    <select
-                      value={wcagFilter}
-                      onChange={(e) => setWcagFilter(e.target.value)}
-                      className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                      aria-label={nl.dashboard.filterByWcag}
-                    >
-                      <option value="ALL">Alle WCAG criteria</option>
-                      {uniqueWcagCriteria.map((c) => (
-                        <option key={c} value={c}>
-                          WCAG {c}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                  <select
-                    value={pageFilter}
-                    onChange={(e) => setPageFilter(e.target.value)}
-                    className="h-9 w-full truncate rounded-md border border-input bg-background px-3 text-sm sm:max-w-[200px]"
-                    aria-label={nl.dashboard.filterByPage}
-                  >
-                    <option value="ALL">Alle pagina&apos;s</option>
-                    {uniquePages.map((url) => (
-                      <option key={url} value={url}>
-                        {new URL(url).pathname}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                )}
+                <select
+                  value={pageFilter}
+                  onChange={(e) => setPageFilter(e.target.value)}
+                  className="h-9 truncate rounded-md border border-input bg-background px-3 text-sm sm:max-w-[200px]"
+                  aria-label={nl.dashboard.filterByPage}
+                >
+                  <option value="ALL">Alle pagina&apos;s</option>
+                  {uniquePages.map((url) => (
+                    <option key={url} value={url}>
+                      {new URL(url).pathname}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {/* Issues list — grouped by rule type */}

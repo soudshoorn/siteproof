@@ -5,6 +5,7 @@ import { PricingSection } from "@/components/landing/pricing-section";
 import { CtaSection } from "@/components/landing/cta-section";
 import { FaqSection, faqs } from "@/components/landing/faq-section";
 import { BreadcrumbJsonLd, FaqJsonLd } from "@/components/structured-data";
+import { getSupabaseUser } from "@/lib/supabase/auth";
 
 export const metadata: Metadata = {
   title: "Prijzen — Kies het plan dat bij je past",
@@ -17,7 +18,9 @@ export const metadata: Metadata = {
   },
 };
 
-export default function PricingPage() {
+export default async function PricingPage() {
+  const user = await getSupabaseUser();
+
   return (
     <>
       <BreadcrumbJsonLd items={[{ name: "Home", href: "/" }, { name: "Prijzen", href: "/pricing" }]} />
@@ -25,7 +28,7 @@ export default function PricingPage() {
       <Header />
       <main id="main-content">
         <div className="pt-8 sm:pt-12">
-          <PricingSection />
+          <PricingSection isLoggedIn={!!user} />
         </div>
         <FaqSection />
         <CtaSection />

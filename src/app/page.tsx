@@ -12,8 +12,11 @@ import {
   SoftwareApplicationJsonLd,
   FaqJsonLd,
 } from "@/components/structured-data";
+import { getSupabaseUser } from "@/lib/supabase/auth";
 
-export default function Home() {
+export default async function Home() {
+  const user = await getSupabaseUser();
+
   return (
     <>
       <OrganizationJsonLd />
@@ -24,7 +27,7 @@ export default function Home() {
         <HeroSection />
         <UrgencySection />
         <FeaturesSection />
-        <PricingSection />
+        <PricingSection isLoggedIn={!!user} />
         <SocialProofSection />
         <FaqSection />
         <CtaSection />

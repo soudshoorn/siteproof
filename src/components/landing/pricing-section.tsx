@@ -9,96 +9,101 @@ import { nl } from "@/lib/i18n/nl";
 import { cn } from "@/lib/utils";
 import { Check, X } from "lucide-react";
 
-function getTiers(loggedIn: boolean) {
-  return [
-    {
-      key: "FREE",
-      name: "Gratis",
-      monthlyPrice: 0,
-      yearlyPrice: 0,
-      description: "Perfect om te beginnen",
-      cta: loggedIn ? "Huidig plan" : nl.common.startFreeTrial,
-      href: loggedIn ? "/dashboard" : "/auth/register",
-      popular: false,
-      features: [
-        { label: `1 ${nl.pricing.websites.toLowerCase()}`, included: true },
-        { label: `5 ${nl.pricing.pagesPerScan.toLowerCase()}`, included: true },
-        { label: nl.pricing.monthlyFreq, included: true },
-        { label: nl.pricing.basic + " rapportage", included: true },
-        { label: nl.pricing.emailAlerts, included: false },
-        { label: nl.pricing.eaaStatement, included: false },
-        { label: nl.pricing.trendAnalysis, included: false },
-      ],
-    },
-    {
-      key: "STARTER",
-      name: "Starter",
-      monthlyPrice: 49,
-      yearlyPrice: 408,
-      description: "Voor kleine websites",
-      cta: nl.pricing.choosePlan,
-      href: loggedIn
-        ? "/dashboard/settings/billing?upgrade=starter"
-        : "/auth/register?plan=starter",
-      popular: false,
-      features: [
-        { label: `3 ${nl.pricing.websites.toLowerCase()}`, included: true },
-        { label: `100 ${nl.pricing.pagesPerScan.toLowerCase()}`, included: true },
-        { label: nl.pricing.weekly, included: true },
-        { label: nl.pricing.pdfExport, included: true },
-        { label: nl.pricing.emailAlerts, included: true },
-        { label: nl.pricing.eaaStatement, included: true },
-        { label: nl.pricing.trendAnalysis, included: true },
-      ],
-    },
-    {
-      key: "PROFESSIONAL",
-      name: "Professional",
-      monthlyPrice: 149,
-      yearlyPrice: 1242,
-      description: "Voor serieuze websites",
-      cta: nl.pricing.choosePlan,
-      href: loggedIn
-        ? "/dashboard/settings/billing?upgrade=professional"
-        : "/auth/register?plan=professional",
-      popular: true,
-      features: [
-        { label: `10 ${nl.pricing.websites.toLowerCase()}`, included: true },
-        { label: `500 ${nl.pricing.pagesPerScan.toLowerCase()}`, included: true },
-        { label: nl.pricing.daily, included: true },
-        { label: nl.pricing.pdfWhiteLabel, included: true },
-        { label: nl.pricing.emailAlerts, included: true },
-        { label: nl.pricing.eaaStatement, included: true },
-        { label: nl.pricing.prioritySupport, included: true },
-      ],
-    },
-    {
-      key: "BUREAU",
-      name: "Bureau",
-      monthlyPrice: 299,
-      yearlyPrice: 2492,
-      description: "Voor web-bureaus",
-      cta: nl.pricing.choosePlan,
-      href: loggedIn
-        ? "/dashboard/settings/billing?upgrade=bureau"
-        : "/auth/register?plan=bureau",
-      popular: false,
-      features: [
-        { label: `50 ${nl.pricing.websites.toLowerCase()}`, included: true },
-        { label: `500 ${nl.pricing.pagesPerScan.toLowerCase()}`, included: true },
-        { label: nl.pricing.daily, included: true },
-        { label: nl.pricing.pdfWhiteLabelApi, included: true },
-        { label: nl.pricing.emailAlerts, included: true },
-        { label: nl.pricing.apiAccess, included: true },
-        { label: `${nl.pricing.unlimited} teamleden`, included: true },
-      ],
-    },
-  ];
+const tiers = [
+  {
+    key: "FREE",
+    name: "Gratis",
+    monthlyPrice: 0,
+    yearlyPrice: 0,
+    description: "Perfect om te beginnen",
+    popular: false,
+    features: [
+      { label: `1 ${nl.pricing.websites.toLowerCase()}`, included: true },
+      { label: `5 ${nl.pricing.pagesPerScan.toLowerCase()}`, included: true },
+      { label: nl.pricing.monthlyFreq, included: true },
+      { label: nl.pricing.basic + " rapportage", included: true },
+      { label: nl.pricing.emailAlerts, included: false },
+      { label: nl.pricing.eaaStatement, included: false },
+      { label: nl.pricing.trendAnalysis, included: false },
+    ],
+  },
+  {
+    key: "STARTER",
+    name: "Starter",
+    monthlyPrice: 49,
+    yearlyPrice: 408,
+    description: "Voor kleine websites",
+    popular: false,
+    features: [
+      { label: `3 ${nl.pricing.websites.toLowerCase()}`, included: true },
+      { label: `100 ${nl.pricing.pagesPerScan.toLowerCase()}`, included: true },
+      { label: nl.pricing.weekly, included: true },
+      { label: nl.pricing.pdfExport, included: true },
+      { label: nl.pricing.emailAlerts, included: true },
+      { label: nl.pricing.eaaStatement, included: true },
+      { label: nl.pricing.trendAnalysis, included: true },
+    ],
+  },
+  {
+    key: "PROFESSIONAL",
+    name: "Professional",
+    monthlyPrice: 149,
+    yearlyPrice: 1242,
+    description: "Voor serieuze websites",
+    popular: true,
+    features: [
+      { label: `10 ${nl.pricing.websites.toLowerCase()}`, included: true },
+      { label: `500 ${nl.pricing.pagesPerScan.toLowerCase()}`, included: true },
+      { label: nl.pricing.daily, included: true },
+      { label: nl.pricing.pdfWhiteLabel, included: true },
+      { label: nl.pricing.emailAlerts, included: true },
+      { label: nl.pricing.eaaStatement, included: true },
+      { label: nl.pricing.prioritySupport, included: true },
+    ],
+  },
+  {
+    key: "BUREAU",
+    name: "Bureau",
+    monthlyPrice: 299,
+    yearlyPrice: 2492,
+    description: "Voor web-bureaus",
+    popular: false,
+    features: [
+      { label: `50 ${nl.pricing.websites.toLowerCase()}`, included: true },
+      { label: `500 ${nl.pricing.pagesPerScan.toLowerCase()}`, included: true },
+      { label: nl.pricing.daily, included: true },
+      { label: nl.pricing.pdfWhiteLabelApi, included: true },
+      { label: nl.pricing.emailAlerts, included: true },
+      { label: nl.pricing.apiAccess, included: true },
+      { label: `${nl.pricing.unlimited} teamleden`, included: true },
+    ],
+  },
+];
+
+function getTierHref(tierKey: string, isLoggedIn: boolean, yearly: boolean): string {
+  const planSlug = tierKey.toLowerCase();
+  const intervalParam = yearly ? "&interval=yearly" : "";
+
+  if (tierKey === "FREE") {
+    return isLoggedIn ? "/dashboard" : "/auth/register";
+  }
+
+  if (isLoggedIn) {
+    return `/dashboard/settings/billing?upgrade=${planSlug}${intervalParam}`;
+  }
+
+  return `/auth/register?plan=${planSlug}${yearly ? "&interval=yearly" : ""}`;
+}
+
+function getTierCta(tierKey: string, isLoggedIn: boolean): string {
+  if (tierKey === "FREE") {
+    return isLoggedIn ? "Huidig plan" : nl.common.startFreeTrial;
+  }
+  return nl.pricing.choosePlan;
 }
 
 export function PricingSection({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
   const [yearly, setYearly] = useState(false);
-  const tiers = getTiers(isLoggedIn);
 
   return (
     <section className="border-t border-border/40 bg-card/30 py-16 sm:py-24">
@@ -137,6 +142,8 @@ export function PricingSection({ isLoggedIn = false }: { isLoggedIn?: boolean })
             const price = yearly
               ? Math.round(tier.yearlyPrice / 12)
               : tier.monthlyPrice;
+            const href = getTierHref(tier.key, isLoggedIn, yearly);
+            const cta = getTierCta(tier.key, isLoggedIn);
 
             return (
               <div
@@ -198,7 +205,7 @@ export function PricingSection({ isLoggedIn = false }: { isLoggedIn?: boolean })
                   className="w-full"
                   asChild
                 >
-                  <Link href={tier.href}>{tier.cta}</Link>
+                  <Link href={href}>{cta}</Link>
                 </Button>
               </div>
             );
