@@ -10,13 +10,10 @@ const nextConfig: NextConfig = {
     ],
   },
   serverExternalPackages: [
-    "puppeteer",
     "@react-pdf/renderer",
     "@prisma/client",
     "@prisma/adapter-pg",
     "pg",
-    "happy-dom",
-    "axe-core",
   ],
   poweredByHeader: false,
   compress: true,

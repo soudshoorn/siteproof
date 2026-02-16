@@ -9,7 +9,7 @@ COPY package.json package-lock.json* ./
 
 RUN npm ci --only=production --ignore-scripts
 
-# Copy Prisma schema and generate client
+# Copy Prisma schema and generate client (needed for types)
 COPY prisma ./prisma
 RUN npx prisma generate
 
@@ -25,8 +25,10 @@ COPY tsconfig.json ./
 # Build the worker
 RUN npx tsc -p workers/tsconfig.json
 
-# Health check — ensures the process is running
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD pgrep -f "dist/workers/scanner.js" > /dev/null || exit 1
+EXPOSE 3001
 
-CMD ["node", "dist/workers/scanner.js"]
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD curl -f http://localhost:3001/health || exit 1
+
+CMD ["node", "dist/workers/server.js"]
