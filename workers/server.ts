@@ -1,5 +1,5 @@
 import "dotenv/config";
-import express from "express";
+import express, { type Request, type Response, type NextFunction } from "express";
 import puppeteer from "puppeteer";
 import type { Browser } from "puppeteer";
 import { analyzePage } from "../src/lib/scanner/analyzer";
@@ -37,7 +37,7 @@ const app = express();
 app.use(express.json());
 
 // Auth middleware — verify shared secret
-app.use((req, res, next) => {
+app.use((req: Request, res: Response, next: NextFunction) => {
   if (req.path === "/health") return next();
 
   if (SCANNER_SECRET) {
@@ -51,7 +51,7 @@ app.use((req, res, next) => {
 });
 
 // Health check
-app.get("/health", (_req, res) => {
+app.get("/health", (_req: Request, res: Response) => {
   res.json({
     status: "ok",
     browserConnected: browser?.connected ?? false,
@@ -66,7 +66,7 @@ app.get("/health", (_req, res) => {
  * Quick scan: analyze a single page with Puppeteer + axe-core.
  * Returns results inline.
  */
-app.post("/scan", async (req, res) => {
+app.post("/scan", async (req: Request, res: Response) => {
   const { url } = req.body;
 
   if (!url || typeof url !== "string") {
@@ -118,7 +118,7 @@ app.post("/scan", async (req, res) => {
  * Returns results for all pages inline.
  * Used for authenticated full scans.
  */
-app.post("/scan/full", async (req, res) => {
+app.post("/scan/full", async (req: Request, res: Response) => {
   const { url, maxPages = 5 } = req.body;
 
   if (!url || typeof url !== "string") {
