@@ -1,16 +1,18 @@
 FROM ghcr.io/puppeteer/puppeteer:latest
 
-ENV NODE_ENV=production
+USER root
 
 WORKDIR /app
 
 # Copy package files first for better layer caching
 COPY package.json package-lock.json* ./
 
-RUN npm ci --only=production --ignore-scripts
+# Install all deps (including devDeps for TypeScript build)
+RUN npm ci --ignore-scripts
 
 # Copy Prisma schema and generate client (needed for types)
 COPY prisma ./prisma
+COPY prisma.config.ts ./
 RUN npx prisma generate
 
 # Copy worker source and shared lib code
@@ -24,6 +26,14 @@ COPY tsconfig.json ./
 
 # Build the worker
 RUN npx tsc -p workers/tsconfig.json
+
+# Remove devDependencies after build
+RUN npm prune --omit=dev
+
+ENV NODE_ENV=production
+
+# Switch back to non-root user for security
+USER pptruser
 
 EXPOSE 3001
 
