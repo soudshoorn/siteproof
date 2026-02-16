@@ -17,13 +17,13 @@ export const getSupabaseUser = cache(async () => {
 
 /**
  * Get the current SiteProof user (Prisma) with optional includes.
- * Returns null if not authenticated or user doesn't exist in our DB yet.
+ * If authenticated in Supabase but missing from Prisma, auto-creates the user.
  */
 export const getCurrentUser = cache(async () => {
   const supabaseUser = await getSupabaseUser();
   if (!supabaseUser) return null;
 
-  const user = await prisma.user.findUnique({
+  let user = await prisma.user.findUnique({
     where: { supabaseId: supabaseUser.id },
     include: {
       memberships: {
@@ -33,6 +33,57 @@ export const getCurrentUser = cache(async () => {
       },
     },
   });
+
+  // Auto-create Prisma user if authenticated in Supabase but missing in DB
+  // This handles cases where the callback sync failed
+  if (!user) {
+    const fullName =
+      supabaseUser.user_metadata?.full_name ||
+      supabaseUser.user_metadata?.name ||
+      null;
+    const orgName = fullName ? `${fullName}'s organisatie` : "Mijn organisatie";
+
+    let slug = orgName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 48);
+    let attempt = 0;
+    while (await prisma.organization.findUnique({ where: { slug } })) {
+      attempt++;
+      slug = `${slug.slice(0, 44)}-${attempt}`;
+    }
+
+    user = await prisma.user.create({
+      data: {
+        supabaseId: supabaseUser.id,
+        email: supabaseUser.email!,
+        fullName,
+        avatarUrl: supabaseUser.user_metadata?.avatar_url || null,
+        memberships: {
+          create: {
+            role: "OWNER",
+            organization: {
+              create: {
+                name: orgName,
+                slug,
+                planType: "FREE",
+                maxWebsites: 1,
+                maxPagesPerScan: 5,
+              },
+            },
+          },
+        },
+      },
+      include: {
+        memberships: {
+          include: {
+            organization: true,
+          },
+        },
+      },
+    });
+  }
 
   return user;
 });
