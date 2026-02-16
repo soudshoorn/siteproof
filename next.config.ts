@@ -9,7 +9,13 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  serverExternalPackages: ["puppeteer", "@react-pdf/renderer"],
+  serverExternalPackages: [
+    "puppeteer",
+    "@react-pdf/renderer",
+    "@prisma/client",
+    "@prisma/adapter-pg",
+    "pg",
+  ],
   poweredByHeader: false,
   compress: true,
   logging: {
