@@ -8,7 +8,8 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 
 # Install all deps (including devDeps for TypeScript build)
-RUN npm ci --ignore-scripts
+# Using npm install instead of npm ci due to npm version differences between local and Docker
+RUN npm install --ignore-scripts
 
 # Copy Prisma schema and generate client (needed for types)
 COPY prisma ./prisma
