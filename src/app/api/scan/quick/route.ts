@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { addQuickScanJob } from "@/lib/scanner/queue";
-import { applyRateLimit, jsonSuccess, jsonError } from "@/lib/api/helpers";
+import { analyzePageLite } from "@/lib/scanner/analyzer-lite";
+import { jsonSuccess, jsonError } from "@/lib/api/helpers";
 
 const quickScanSchema = z.object({
   url: z
@@ -24,19 +24,12 @@ const quickScanSchema = z.object({
 /**
  * POST /api/scan/quick
  *
- * Start a free quick scan (1 page, no auth required).
- * Rate limited to 3 per IP per day.
- *
- * Request body: { url: string }
- * Response: { success: true, data: { id: string, status: string } }
+ * Free quick scan — runs inline on Vercel serverless (no Puppeteer).
+ * Uses fetch + jsdom + axe-core for lightweight analysis.
+ * Rate limited to 3 per IP per day via database check.
  */
 export async function POST(request: Request) {
   try {
-    // Rate limit: 3 quick scans per IP per day
-    const rateLimitResponse = await applyRateLimit("quickScan");
-    if (rateLimitResponse) return rateLimitResponse;
-
-    // Parse and validate body
     const body = await request.json().catch(() => null);
     if (!body) {
       return jsonError("Ongeldige request body.", 400);
@@ -46,73 +39,109 @@ export async function POST(request: Request) {
     if (!validation.success) {
       const errors = validation.error.flatten().fieldErrors;
       return NextResponse.json(
-        {
-          success: false,
-          error: "Validatiefout",
-          details: errors,
-        },
+        { success: false, error: "Validatiefout", details: errors },
         { status: 400 }
       );
     }
 
-    // Normalize URL
-    const parsedUrl = new URL(validation.data.url);
-    // Ensure https if no protocol specified
-    const url =
-      parsedUrl.protocol === "http:"
-        ? validation.data.url
-        : validation.data.url;
+    const url = validation.data.url;
 
-    // Get client IP for tracking
     const ip =
       request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
       request.headers.get("x-real-ip") ||
       "unknown";
 
-    // Create QuickScan record
-    const quickScan = await prisma.quickScan.create({
-      data: {
-        url,
-        status: "QUEUED",
-        ipAddress: ip,
-      },
+    // Rate limit: 3 per IP per day
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const scanCount = await prisma.quickScan.count({
+      where: { ipAddress: ip, createdAt: { gte: today } },
     });
 
-    // Queue the job
+    if (scanCount >= 3) {
+      return jsonError(
+        "Je hebt het maximum aantal gratis scans voor vandaag bereikt (3 per dag). Maak een account aan voor meer scans.",
+        429
+      );
+    }
+
+    // Create record
+    const quickScan = await prisma.quickScan.create({
+      data: { url, status: "SCANNING", ipAddress: ip },
+    });
+
+    // Run scan inline
     try {
-      await addQuickScanJob({
-        quickScanId: quickScan.id,
-        url,
-      });
-    } catch {
-      // Redis not available — update status to failed
+      const analysis = await analyzePageLite(url);
+
+      const severityOrder = { CRITICAL: 0, SERIOUS: 1, MODERATE: 2, MINOR: 3 };
+      const topIssues = [...analysis.issues]
+        .sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity])
+        .slice(0, 5)
+        .map((issue) => ({
+          axeRuleId: issue.axeRuleId,
+          severity: issue.severity,
+          description: issue.description,
+          helpText: issue.helpText,
+          fixSuggestion: issue.fixSuggestion,
+          wcagCriteria: issue.wcagCriteria,
+          wcagLevel: issue.wcagLevel,
+          htmlElement: issue.htmlElement,
+          cssSelector: issue.cssSelector,
+        }));
+
+      const counts = {
+        critical: analysis.issues.filter((i) => i.severity === "CRITICAL").length,
+        serious: analysis.issues.filter((i) => i.severity === "SERIOUS").length,
+        moderate: analysis.issues.filter((i) => i.severity === "MODERATE").length,
+        minor: analysis.issues.filter((i) => i.severity === "MINOR").length,
+        total: analysis.issues.length,
+      };
+
       await prisma.quickScan.update({
         where: { id: quickScan.id },
         data: {
-          status: "FAILED",
+          status: "COMPLETED",
+          score: analysis.score,
           results: {
-            error:
-              "Scanner is momenteel niet beschikbaar. Probeer het later opnieuw.",
+            title: analysis.title,
+            loadTime: analysis.loadTime,
+            topIssues,
+            issueCounts: counts,
+            failedWcagCriteria: [...new Set(analysis.issues.flatMap((i) => i.wcagCriteria))],
           },
         },
       });
 
-      return jsonError(
-        "Scanner is momenteel niet beschikbaar. Probeer het later opnieuw.",
-        503
-      );
-    }
-
-    return jsonSuccess(
-      {
+      return jsonSuccess({
         id: quickScan.id,
-        status: quickScan.status,
         url: quickScan.url,
-      },
-      201
-    );
+        status: "COMPLETED",
+        score: analysis.score,
+        results: {
+          pageTitle: analysis.title,
+          issues: topIssues,
+          totalIssues: counts.total,
+          criticalIssues: counts.critical,
+          seriousIssues: counts.serious,
+          moderateIssues: counts.moderate,
+          minorIssues: counts.minor,
+        },
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      await prisma.quickScan.update({
+        where: { id: quickScan.id },
+        data: { status: "FAILED", results: { error: errorMessage } },
+      });
+
+      return jsonError(errorMessage, 422);
+    }
   } catch (error) {
     console.error("Quick scan error:", error);
     return jsonError("Er is een onverwachte fout opgetreden.", 500);
   }
 }
+
+export const maxDuration = 30;

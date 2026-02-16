@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +18,7 @@ import {
   Share2,
 } from "lucide-react";
 
-type ScanStatus = "idle" | "submitting" | "polling" | "completed" | "failed";
+type ScanStatus = "idle" | "scanning" | "completed" | "failed";
 
 interface QuickScanIssue {
   description: string;
@@ -86,56 +86,6 @@ export function ScanWidget({ variant = "hero", className }: ScanWidgetProps) {
   const [status, setStatus] = useState<ScanStatus>("idle");
   const [result, setResult] = useState<QuickScanResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const stopPolling = useCallback(() => {
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current);
-      pollingRef.current = null;
-    }
-  }, []);
-
-  useEffect(() => {
-    return () => stopPolling();
-  }, [stopPolling]);
-
-  const pollScan = useCallback(
-    (scanId: string) => {
-      setStatus("polling");
-
-      pollingRef.current = setInterval(async () => {
-        try {
-          const res = await fetch(`/api/scan/quick/${scanId}`);
-          const data = await res.json();
-
-          if (!data.success) {
-            stopPolling();
-            setError(data.error || nl.scan.scanFailed);
-            setStatus("failed");
-            return;
-          }
-
-          const scan = data.data as QuickScanResult;
-
-          if (scan.status === "COMPLETED") {
-            stopPolling();
-            setResult(scan);
-            setStatus("completed");
-          } else if (scan.status === "FAILED") {
-            stopPolling();
-            setResult(scan);
-            setError(scan.results?.error || nl.scan.scanFailed);
-            setStatus("failed");
-          }
-        } catch {
-          stopPolling();
-          setError(nl.scan.scanFailed);
-          setStatus("failed");
-        }
-      }, 2000);
-    },
-    [stopPolling]
-  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -149,7 +99,7 @@ export function ScanWidget({ variant = "hero", className }: ScanWidgetProps) {
       scanUrl = `https://${scanUrl}`;
     }
 
-    setStatus("submitting");
+    setStatus("scanning");
 
     try {
       const res = await fetch("/api/scan/quick", {
@@ -170,14 +120,15 @@ export function ScanWidget({ variant = "hero", className }: ScanWidgetProps) {
         return;
       }
 
-      pollScan(data.data.id);
+      setResult(data.data as QuickScanResult);
+      setStatus("completed");
     } catch {
       setError(nl.scan.scanFailed);
       setStatus("failed");
     }
   };
 
-  const isScanning = status === "submitting" || status === "polling";
+  const isScanning = status === "scanning";
 
   const handleShare = async () => {
     if (!result) return;
