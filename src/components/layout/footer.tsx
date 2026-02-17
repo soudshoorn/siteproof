@@ -83,10 +83,18 @@ export function Footer() {
         </div>
 
         {/* Bottom bar */}
-        <div className="mt-10 border-t border-border/40 pt-6">
-          <p className="text-center text-xs text-muted-foreground">
+        <div className="mt-10 flex items-center justify-between border-t border-border/40 pt-6">
+          <p className="text-xs text-muted-foreground">
             &copy; {new Date().getFullYear()} {nl.common.appName}. Alle rechten voorbehouden.
           </p>
+          <a
+            href="https://webser.nl"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-muted-foreground transition-colors hover:text-primary"
+          >
+            Een project van Webser
+          </a>
         </div>
       </div>
     </footer>

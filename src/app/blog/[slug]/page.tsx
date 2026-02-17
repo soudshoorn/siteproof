@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { ScanWidget } from "@/components/scan/scan-widget";
@@ -10,6 +9,7 @@ import { prisma } from "@/lib/db";
 import { CalendarDays, Clock, ArrowLeft } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { ArticleJsonLd, BreadcrumbJsonLd } from "@/components/structured-data";
+import { marked } from "marked";
 
 interface BlogPostPageProps {
   params: Promise<{ slug: string }>;
@@ -39,7 +39,7 @@ export async function generateMetadata({ params }: BlogPostPageProps): Promise<M
   const { slug } = await params;
   const post = await prisma.blogPost.findUnique({
     where: { slug },
-    select: { title: true, metaDescription: true, excerpt: true, featuredImage: true },
+    select: { title: true, metaDescription: true, excerpt: true },
   });
 
   if (!post) return { title: "Post niet gevonden" };
@@ -51,7 +51,6 @@ export async function generateMetadata({ params }: BlogPostPageProps): Promise<M
       title: post.title,
       description: post.metaDescription || post.excerpt || undefined,
       type: "article",
-      ...(post.featuredImage ? { images: [{ url: post.featuredImage }] } : {}),
     },
   };
 }
@@ -86,6 +85,18 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
   const readingTime = estimateReadingTime(post.content);
   const headings = extractHeadings(post.content);
 
+  // Convert markdown to HTML
+  const renderer = new marked.Renderer();
+  renderer.heading = ({ text, depth }) => {
+    const id = text
+      .replace(/<[^>]*>/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, "")
+      .replace(/\s+/g, "-");
+    return `<h${depth} id="${id}">${text}</h${depth}>`;
+  };
+  const htmlContent = await marked(post.content, { renderer });
+
   // Fetch related posts
   const relatedPosts = await prisma.blogPost.findMany({
     where: {
@@ -100,7 +111,6 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
       title: true,
       slug: true,
       excerpt: true,
-      featuredImage: true,
       publishedAt: true,
       category: true,
     },
@@ -116,7 +126,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
         datePublished={post.publishedAt?.toISOString() || post.createdAt.toISOString()}
         dateModified={post.updatedAt.toISOString()}
         authorName={post.author.fullName || "SiteProof"}
-        image={post.featuredImage || undefined}
+        image={undefined}
       />
       <Header />
       <main id="main-content">
@@ -170,20 +180,6 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
                 )}
               </header>
 
-              {/* Featured image */}
-              {post.featuredImage && (
-                <div className="relative mt-8 aspect-[16/9] overflow-hidden rounded-xl">
-                  <Image
-                    src={post.featuredImage}
-                    alt=""
-                    fill
-                    className="object-cover"
-                    sizes="(max-width: 768px) 100vw, 768px"
-                    priority
-                  />
-                </div>
-              )}
-
               <div className="mt-12 flex gap-8">
                 {/* Table of contents (desktop sidebar) */}
                 {headings.length > 0 && (
@@ -213,7 +209,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
                 {/* Content */}
                 <div
                   className="prose prose-invert min-w-0 max-w-none prose-headings:scroll-mt-24 prose-headings:font-bold prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-img:rounded-lg"
-                  dangerouslySetInnerHTML={{ __html: post.content }}
+                  dangerouslySetInnerHTML={{ __html: htmlContent }}
                 />
               </div>
             </div>
@@ -249,20 +245,6 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
                     key={related.slug}
                     className="group flex flex-col overflow-hidden rounded-xl border border-border/50 bg-card/50 transition-colors hover:border-border"
                   >
-                    {related.featuredImage && (
-                      <Link
-                        href={`/blog/${related.slug}`}
-                        className="relative aspect-[16/9] overflow-hidden"
-                      >
-                        <Image
-                          src={related.featuredImage}
-                          alt=""
-                          fill
-                          className="object-cover transition-transform group-hover:scale-105"
-                          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                        />
-                      </Link>
-                    )}
                     <div className="flex flex-1 flex-col p-5">
                       {related.category && (
                         <Badge

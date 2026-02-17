@@ -33,7 +33,6 @@ export default async function EditBlogPostPage({
           slug: post.slug,
           excerpt: post.excerpt,
           content: post.content,
-          featuredImage: post.featuredImage,
           metaDescription: post.metaDescription,
           category: post.category,
           tags: post.tags,

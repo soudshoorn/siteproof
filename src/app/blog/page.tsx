@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import Image from "next/image";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { Badge } from "@/components/ui/badge";
@@ -52,7 +51,6 @@ export default async function BlogPage({
         title: true,
         slug: true,
         excerpt: true,
-        featuredImage: true,
         category: true,
         publishedAt: true,
         content: true,
@@ -129,20 +127,6 @@ export default async function BlogPage({
                       key={post.id}
                       className="group flex flex-col overflow-hidden rounded-xl border border-border/50 bg-card/50 transition-colors hover:border-border"
                     >
-                      {post.featuredImage && (
-                        <Link
-                          href={`/blog/${post.slug}`}
-                          className="relative aspect-[16/9] overflow-hidden"
-                        >
-                          <Image
-                            src={post.featuredImage}
-                            alt=""
-                            fill
-                            className="object-cover transition-transform group-hover:scale-105"
-                            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                          />
-                        </Link>
-                      )}
                       <div className="flex flex-1 flex-col p-5">
                         {post.category && (
                           <Badge variant="outline" className="mb-3 w-fit text-xs">

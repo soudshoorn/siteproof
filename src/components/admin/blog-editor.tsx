@@ -20,7 +20,6 @@ interface BlogPost {
   slug: string;
   excerpt: string | null;
   content: string;
-  featuredImage: string | null;
   metaDescription: string | null;
   category: string | null;
   tags: string[];
@@ -42,7 +41,6 @@ export function BlogEditor({ post }: BlogEditorProps) {
   const [slug, setSlug] = useState(post?.slug ?? "");
   const [excerpt, setExcerpt] = useState(post?.excerpt ?? "");
   const [content, setContent] = useState(post?.content ?? "");
-  const [featuredImage, setFeaturedImage] = useState(post?.featuredImage ?? "");
   const [metaDescription, setMetaDescription] = useState(post?.metaDescription ?? "");
   const [category, setCategory] = useState(post?.category ?? "");
   const [tagsInput, setTagsInput] = useState(post?.tags?.join(", ") ?? "");
@@ -78,7 +76,6 @@ export function BlogEditor({ post }: BlogEditorProps) {
       slug: slug.trim(),
       excerpt: excerpt.trim() || null,
       content,
-      featuredImage: featuredImage.trim() || null,
       metaDescription: metaDescription.trim() || null,
       category: category || null,
       tags,
@@ -289,16 +286,6 @@ export function BlogEditor({ post }: BlogEditorProps) {
                 placeholder="tag1, tag2, tag3"
               />
               <p className="text-xs text-muted-foreground">Kommagescheiden.</p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="featuredImage">Featured image URL</Label>
-              <Input
-                id="featuredImage"
-                value={featuredImage}
-                onChange={(e) => setFeaturedImage(e.target.value)}
-                placeholder="https://..."
-              />
             </div>
 
             <div className="space-y-2">
