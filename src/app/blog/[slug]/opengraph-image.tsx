@@ -1,7 +1,6 @@
 import { ImageResponse } from "next/og";
 import { prisma } from "@/lib/db";
 
-export const runtime = "edge";
 export const alt = "SiteProof Blog";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
