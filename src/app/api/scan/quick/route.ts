@@ -2,15 +2,11 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { jsonSuccess, jsonError } from "@/lib/api/helpers";
+import { after } from "next/server";
 
 const SCANNER_SERVICE_URL = process.env.SCANNER_SERVICE_URL;
 const SCANNER_SECRET = process.env.SCANNER_SECRET || "";
 
-/**
- * Normalize a domain or URL to a full URL with protocol.
- * "example.com" → "https://example.com"
- * "http://example.com" → "http://example.com"
- */
 function normalizeUrl(input: string): string {
   const trimmed = input.trim();
   if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
@@ -30,10 +26,110 @@ const quickScanSchema = z.object({
 });
 
 /**
+ * Run the actual scan and update the DB record.
+ * This runs after the response is sent to the client.
+ */
+async function performScan(scanId: string, url: string) {
+  try {
+    const scanResponse = await fetch(`${SCANNER_SERVICE_URL}/scan`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(SCANNER_SECRET ? { Authorization: `Bearer ${SCANNER_SECRET}` } : {}),
+      },
+      body: JSON.stringify({ url }),
+      signal: AbortSignal.timeout(45_000),
+    });
+
+    const scanData = await scanResponse.json();
+
+    if (!scanResponse.ok || !scanData.success) {
+      throw new Error(scanData.error || "Scan mislukt");
+    }
+
+    const analysis = scanData.data;
+
+    const severityOrder: Record<string, number> = { CRITICAL: 0, SERIOUS: 1, MODERATE: 2, MINOR: 3 };
+
+    const seenRules = new Set<string>();
+    const uniqueIssues = [...analysis.issues]
+      .sort((a: { severity: string }, b: { severity: string }) =>
+        (severityOrder[a.severity] ?? 4) - (severityOrder[b.severity] ?? 4)
+      )
+      .filter((issue: { axeRuleId: string }) => {
+        if (seenRules.has(issue.axeRuleId)) return false;
+        seenRules.add(issue.axeRuleId);
+        return true;
+      });
+
+    const ruleCounts = new Map<string, number>();
+    for (const issue of analysis.issues) {
+      ruleCounts.set(issue.axeRuleId, (ruleCounts.get(issue.axeRuleId) || 0) + 1);
+    }
+
+    const topIssues = uniqueIssues
+      .slice(0, 10)
+      .map((issue: {
+        axeRuleId: string;
+        severity: string;
+        description: string;
+        helpText: string;
+        fixSuggestion: string;
+        wcagCriteria: string[];
+        wcagLevel: string | null;
+        htmlElement: string | null;
+        cssSelector: string | null;
+      }) => ({
+        axeRuleId: issue.axeRuleId,
+        severity: issue.severity,
+        description: issue.description,
+        helpText: issue.helpText,
+        fixSuggestion: issue.fixSuggestion,
+        wcagCriteria: issue.wcagCriteria,
+        wcagLevel: issue.wcagLevel,
+        htmlElement: issue.htmlElement,
+        cssSelector: issue.cssSelector,
+        elementCount: ruleCounts.get(issue.axeRuleId) || 1,
+      }));
+
+    const counts = {
+      critical: analysis.issues.filter((i: { severity: string }) => i.severity === "CRITICAL").length,
+      serious: analysis.issues.filter((i: { severity: string }) => i.severity === "SERIOUS").length,
+      moderate: analysis.issues.filter((i: { severity: string }) => i.severity === "MODERATE").length,
+      minor: analysis.issues.filter((i: { severity: string }) => i.severity === "MINOR").length,
+      total: analysis.issues.length,
+      uniqueRules: uniqueIssues.length,
+    };
+
+    await prisma.quickScan.update({
+      where: { id: scanId },
+      data: {
+        status: "COMPLETED",
+        score: analysis.score,
+        results: {
+          title: analysis.title,
+          loadTime: analysis.loadTime,
+          topIssues,
+          issueCounts: counts,
+          failedWcagCriteria: [...new Set(analysis.issues.flatMap((i: { wcagCriteria: string[] }) => i.wcagCriteria))] as string[],
+        },
+      },
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    await prisma.quickScan.update({
+      where: { id: scanId },
+      data: { status: "FAILED", results: { error: errorMessage } },
+    });
+  }
+}
+
+/**
  * POST /api/scan/quick
  *
- * Free quick scan — proxies to Railway scanner service (Puppeteer + axe-core).
- * Rate limited to 3 per IP per day via database check.
+ * Creates a scan record and returns immediately.
+ * The actual scan runs asynchronously via next/server after().
+ * Client polls /api/scan/quick/[id] for results.
  */
 export async function POST(request: Request) {
   try {
@@ -76,125 +172,20 @@ export async function POST(request: Request) {
       );
     }
 
-    // Create record
+    // Create record immediately
     const quickScan = await prisma.quickScan.create({
       data: { url, status: "SCANNING", ipAddress: ip },
     });
 
-    // Proxy to Railway scanner service
-    try {
-      const scanResponse = await fetch(`${SCANNER_SERVICE_URL}/scan`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(SCANNER_SECRET ? { Authorization: `Bearer ${SCANNER_SECRET}` } : {}),
-        },
-        body: JSON.stringify({ url }),
-        signal: AbortSignal.timeout(30_000),
-      });
+    // Run scan asynchronously after response is sent
+    after(() => performScan(quickScan.id, url));
 
-      const scanData = await scanResponse.json();
-
-      if (!scanResponse.ok || !scanData.success) {
-        throw new Error(scanData.error || "Scan mislukt");
-      }
-
-      const analysis = scanData.data;
-
-      const severityOrder: Record<string, number> = { CRITICAL: 0, SERIOUS: 1, MODERATE: 2, MINOR: 3 };
-
-      // Deduplicate by axeRuleId — show unique issue types, not individual elements
-      const seenRules = new Set<string>();
-      const uniqueIssues = [...analysis.issues]
-        .sort((a: { severity: string }, b: { severity: string }) =>
-          (severityOrder[a.severity] ?? 4) - (severityOrder[b.severity] ?? 4)
-        )
-        .filter((issue: { axeRuleId: string }) => {
-          if (seenRules.has(issue.axeRuleId)) return false;
-          seenRules.add(issue.axeRuleId);
-          return true;
-        });
-
-      // Count instances per rule for display
-      const ruleCounts = new Map<string, number>();
-      for (const issue of analysis.issues) {
-        ruleCounts.set(issue.axeRuleId, (ruleCounts.get(issue.axeRuleId) || 0) + 1);
-      }
-
-      const topIssues = uniqueIssues
-        .slice(0, 5)
-        .map((issue: {
-          axeRuleId: string;
-          severity: string;
-          description: string;
-          helpText: string;
-          fixSuggestion: string;
-          wcagCriteria: string[];
-          wcagLevel: string | null;
-          htmlElement: string | null;
-          cssSelector: string | null;
-        }) => ({
-          axeRuleId: issue.axeRuleId,
-          severity: issue.severity,
-          description: issue.description,
-          helpText: issue.helpText,
-          fixSuggestion: issue.fixSuggestion,
-          wcagCriteria: issue.wcagCriteria,
-          wcagLevel: issue.wcagLevel,
-          htmlElement: issue.htmlElement,
-          cssSelector: issue.cssSelector,
-          elementCount: ruleCounts.get(issue.axeRuleId) || 1,
-        }));
-
-      const counts = {
-        critical: analysis.issues.filter((i: { severity: string }) => i.severity === "CRITICAL").length,
-        serious: analysis.issues.filter((i: { severity: string }) => i.severity === "SERIOUS").length,
-        moderate: analysis.issues.filter((i: { severity: string }) => i.severity === "MODERATE").length,
-        minor: analysis.issues.filter((i: { severity: string }) => i.severity === "MINOR").length,
-        total: analysis.issues.length,
-        uniqueRules: uniqueIssues.length,
-      };
-
-      await prisma.quickScan.update({
-        where: { id: quickScan.id },
-        data: {
-          status: "COMPLETED",
-          score: analysis.score,
-          results: {
-            title: analysis.title,
-            loadTime: analysis.loadTime,
-            topIssues,
-            issueCounts: counts,
-            failedWcagCriteria: [...new Set(analysis.issues.flatMap((i: { wcagCriteria: string[] }) => i.wcagCriteria))] as string[],
-          },
-        },
-      });
-
-      return jsonSuccess({
-        id: quickScan.id,
-        url: quickScan.url,
-        status: "COMPLETED",
-        score: analysis.score,
-        results: {
-          pageTitle: analysis.title,
-          issues: topIssues,
-          totalIssues: counts.total,
-          criticalIssues: counts.critical,
-          seriousIssues: counts.serious,
-          moderateIssues: counts.moderate,
-          minorIssues: counts.minor,
-        },
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-
-      await prisma.quickScan.update({
-        where: { id: quickScan.id },
-        data: { status: "FAILED", results: { error: errorMessage } },
-      });
-
-      return jsonError(errorMessage, 422);
-    }
+    // Return immediately so client can redirect to result page
+    return jsonSuccess({
+      id: quickScan.id,
+      url: quickScan.url,
+      status: "SCANNING",
+    });
   } catch (error) {
     console.error("Quick scan error:", error);
     return jsonError("Er is een onverwachte fout opgetreden.", 500);

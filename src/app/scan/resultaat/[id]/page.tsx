@@ -7,6 +7,30 @@ import { ShareableScanResult } from "@/components/scan/shareable-scan-result";
 import { getScoreLabel } from "@/lib/utils";
 import { calculateEaaCompliance, getEaaStatus } from "@/lib/eaa/mapping";
 
+/**
+ * Normalize DB result format to UI format.
+ */
+function normalizeResults(raw: Record<string, unknown> | null): Record<string, unknown> | null {
+  if (!raw) return null;
+  if ("issues" in raw) return raw;
+
+  const topIssues = (raw.topIssues as unknown[]) ?? [];
+  const issueCounts = (raw.issueCounts as Record<string, number>) ?? {};
+
+  return {
+    pageTitle: raw.title ?? null,
+    issues: topIssues,
+    totalIssues: issueCounts.total ?? 0,
+    criticalIssues: issueCounts.critical ?? 0,
+    seriousIssues: issueCounts.serious ?? 0,
+    moderateIssues: issueCounts.moderate ?? 0,
+    minorIssues: issueCounts.minor ?? 0,
+    uniqueRules: issueCounts.uniqueRules ?? 0,
+    loadTime: raw.loadTime ?? null,
+    failedWcagCriteria: raw.failedWcagCriteria ?? [],
+  };
+}
+
 interface PageProps {
   params: Promise<{ id: string }>;
 }
@@ -75,14 +99,18 @@ export default async function ShareableScanResultPage({ params }: PageProps) {
   const isInProgress =
     quickScan.status !== "COMPLETED" && quickScan.status !== "FAILED";
 
+  // Normalize DB results to UI format
+  const rawResults = quickScan.results as Record<string, unknown> | null;
+  const normalizedResults = normalizeResults(rawResults);
+
   // Calculate EAA compliance from quick scan results
   let eaaData = undefined;
-  if (quickScan.status === "COMPLETED" && quickScan.results) {
-    const results = quickScan.results as Record<string, unknown>;
-    const issues = (results.issues as Array<{ wcagCriteria?: string[] }>) ?? [];
-    const failedCriteria = [
-      ...new Set(issues.flatMap((i) => i.wcagCriteria ?? [])),
-    ];
+  if (quickScan.status === "COMPLETED" && normalizedResults) {
+    const issues = (normalizedResults.issues as Array<{ wcagCriteria?: string[] }>) ?? [];
+    const failedWcag = (normalizedResults.failedWcagCriteria as string[]) ?? [];
+    const failedCriteria = failedWcag.length > 0
+      ? failedWcag
+      : [...new Set(issues.flatMap((i) => i.wcagCriteria ?? []))];
     const compliance = calculateEaaCompliance(failedCriteria);
     const status = getEaaStatus(compliance.percentage);
 
@@ -106,7 +134,7 @@ export default async function ShareableScanResultPage({ params }: PageProps) {
             url={quickScan.url}
             status={quickScan.status}
             score={quickScan.score}
-            results={quickScan.results as Record<string, unknown> | null}
+            results={normalizedResults}
             createdAt={quickScan.createdAt}
             isInProgress={isInProgress}
             eaaData={eaaData}

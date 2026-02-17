@@ -95,7 +95,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
       .replace(/\s+/g, "-");
     return `<h${depth} id="${id}">${text}</h${depth}>`;
   };
-  const htmlContent = await marked(post.content, { renderer });
+  const htmlContent = await marked(post.content, { renderer, breaks: true });
 
   // Fetch related posts
   const relatedPosts = await prisma.blogPost.findMany({
@@ -132,7 +132,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
       <main id="main-content">
         <article className="py-16 sm:py-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="mx-auto max-w-3xl">
+            <div className="mx-auto max-w-2xl lg:max-w-3xl">
               {/* Back link */}
               <Link
                 href="/blog"
@@ -180,38 +180,47 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
                 )}
               </header>
 
-              <div className="mt-12 flex gap-8">
-                {/* Table of contents (desktop sidebar) */}
-                {headings.length > 0 && (
-                  <aside className="hidden w-56 shrink-0 lg:block">
-                    <nav
-                      className="sticky top-24 space-y-1"
-                      aria-label="Inhoudsopgave"
-                    >
-                      <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        Inhoudsopgave
-                      </p>
-                      {headings.map((heading) => (
+              {/* Table of contents */}
+              {headings.length > 0 && (
+                <nav
+                  className="mt-10 rounded-xl border border-border/50 bg-card/50 p-6"
+                  aria-label="Inhoudsopgave"
+                >
+                  <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                    Inhoudsopgave
+                  </p>
+                  <ul className="space-y-1.5">
+                    {headings.map((heading) => (
+                      <li key={heading.id}>
                         <a
-                          key={heading.id}
                           href={`#${heading.id}`}
-                          className={`block text-sm text-muted-foreground transition-colors hover:text-foreground ${
+                          className={`block text-sm text-zinc-400 transition-colors hover:text-white ${
                             heading.level === 3 ? "pl-4" : ""
                           }`}
                         >
                           {heading.text}
                         </a>
-                      ))}
-                    </nav>
-                  </aside>
-                )}
+                      </li>
+                    ))}
+                  </ul>
+                </nav>
+              )}
 
-                {/* Content */}
-                <div
-                  className="prose prose-invert min-w-0 max-w-none prose-headings:scroll-mt-24 prose-headings:font-bold prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-img:rounded-lg"
-                  dangerouslySetInnerHTML={{ __html: htmlContent }}
-                />
-              </div>
+              {/* Content */}
+              <div
+                className="prose prose-invert prose-lg mt-12 max-w-none
+                  prose-headings:scroll-mt-24 prose-headings:font-bold prose-headings:tracking-tight
+                  prose-h2:mt-12 prose-h2:mb-4 prose-h2:text-2xl
+                  prose-h3:mt-8 prose-h3:mb-3 prose-h3:text-xl
+                  prose-p:leading-relaxed prose-p:text-zinc-300
+                  prose-li:text-zinc-300 prose-li:leading-relaxed
+                  prose-strong:text-white
+                  prose-a:text-primary prose-a:no-underline hover:prose-a:underline
+                  prose-blockquote:border-primary/50 prose-blockquote:text-zinc-400
+                  prose-code:text-primary prose-code:bg-primary/10 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:before:content-none prose-code:after:content-none
+                  prose-img:rounded-lg"
+                dangerouslySetInnerHTML={{ __html: htmlContent }}
+              />
             </div>
           </div>
         </article>

@@ -219,19 +219,47 @@ export function ShareableScanResult({
   // In progress
   if (isInProgress) {
     return (
-      <div className="flex flex-col items-center gap-6 py-16 text-center">
-        <div className="relative size-20">
+      <div className="flex flex-col items-center gap-8 py-16 text-center">
+        <div className="relative size-24">
           <div className="absolute inset-0 animate-ping rounded-full bg-primary/20" />
-          <div className="relative flex size-20 items-center justify-center rounded-full bg-primary/10">
-            <Loader2 className="size-8 animate-spin text-primary" />
+          <div className="absolute inset-2 animate-pulse rounded-full bg-primary/10" />
+          <div className="relative flex size-24 items-center justify-center rounded-full border-2 border-primary/30 bg-primary/5">
+            <Loader2 className="size-10 animate-spin text-primary" />
           </div>
         </div>
-        <div>
-          <h1 className="text-2xl font-bold">{nl.scan.scanning}</h1>
-          <p className="mt-2 text-muted-foreground">
-            {hostname} wordt gescand...
+        <div className="space-y-3">
+          <h1 className="text-2xl font-bold sm:text-3xl">Website wordt gescand</h1>
+          <p className="text-lg text-muted-foreground">
+            {hostname}
           </p>
         </div>
+        <div className="mx-auto max-w-sm space-y-4">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Pagina laden & analyseren...</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-muted">
+              <div className="h-full animate-pulse rounded-full bg-primary/60" style={{ width: "65%" }} />
+            </div>
+          </div>
+          <ul className="space-y-2 text-sm text-muted-foreground">
+            <li className="flex items-center gap-2">
+              <CheckCircle2 className="size-4 text-primary" />
+              Verbinding gemaakt
+            </li>
+            <li className="flex items-center gap-2">
+              <Loader2 className="size-4 animate-spin text-primary" />
+              WCAG 2.1 AA controle uitvoeren...
+            </li>
+            <li className="flex items-center gap-2 opacity-40">
+              <Info className="size-4" />
+              Resultaten verwerken
+            </li>
+          </ul>
+        </div>
+        <p className="text-xs text-muted-foreground/60">
+          Dit duurt meestal 10-20 seconden
+        </p>
       </div>
     );
   }
@@ -527,15 +555,12 @@ export function ShareableScanResult({
           <p className="text-sm text-muted-foreground">
             {nl.scan.fullScanCta}
           </p>
-          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:justify-center">
+          <div className="mt-3 flex justify-center">
             <Button asChild>
               <a href="/auth/register">
                 Gratis account aanmaken
                 <ArrowRight className="ml-1 size-4" />
               </a>
-            </Button>
-            <Button variant="outline" asChild>
-              <a href="/scan">Nieuwe scan starten</a>
             </Button>
           </div>
         </div>
