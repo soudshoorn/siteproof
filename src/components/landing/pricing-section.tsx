@@ -56,7 +56,7 @@ const tiers = [
       { label: `500 ${nl.pricing.pagesPerScan.toLowerCase()}`, included: true },
       { label: nl.pricing.daily, included: true },
       { label: "PDF export", included: true },
-      { label: "White-label", included: true, comingSoon: true },
+      { label: "White-label", included: true, binnenkort: true },
       { label: nl.pricing.emailAlerts, included: true },
       { label: nl.pricing.eaaStatement, included: true },
       { label: nl.pricing.prioritySupport, included: true },
@@ -74,9 +74,9 @@ const tiers = [
       { label: `500 ${nl.pricing.pagesPerScan.toLowerCase()}`, included: true },
       { label: nl.pricing.daily, included: true },
       { label: "PDF export", included: true },
-      { label: "White-label", included: true, comingSoon: true },
+      { label: "White-label", included: true, binnenkort: true },
       { label: nl.pricing.emailAlerts, included: true },
-      { label: nl.pricing.apiAccess, included: true, comingSoon: true },
+      { label: nl.pricing.apiAccess, included: true, binnenkort: true },
       { label: `${nl.pricing.unlimited} teamleden`, included: true },
     ],
   },
@@ -200,9 +200,9 @@ export function PricingSection({ isLoggedIn = false }: { isLoggedIn?: boolean })
                         "flex items-center gap-1.5"
                       )}>
                         {feature.label}
-                        {feature.comingSoon && (
+                        {feature.binnenkort && (
                           <Badge variant="outline" className="px-1.5 py-0 text-[10px] font-normal text-muted-foreground">
-                            soon
+                            binnenkort
                           </Badge>
                         )}
                       </span>

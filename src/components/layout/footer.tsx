@@ -57,8 +57,8 @@ export function Footer() {
                   Webser
                 </a>
               </p>
-              <p>{nl.footer.kvk}: [KVK_NUMMER]</p>
-              <p>{nl.footer.btw}: [BTW_ID]</p>
+              <p>{nl.footer.kvk}: 93875568</p>
+              <p>{nl.footer.btw}: NL005048718B97</p>
             </div>
           </div>
 

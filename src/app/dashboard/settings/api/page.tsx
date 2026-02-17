@@ -29,7 +29,7 @@ export default async function ApiSettingsPage() {
           <div>
             <div className="flex items-center justify-center gap-2">
               <p className="text-lg font-semibold">API toegang</p>
-              <Badge variant="secondary">Coming soon</Badge>
+              <Badge variant="secondary">Binnenkort</Badge>
             </div>
             <p className="mt-2 max-w-md text-sm text-muted-foreground">
               Binnenkort kun je via de SiteProof API programmatic scans starten, resultaten ophalen en websites beheren.

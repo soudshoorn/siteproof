@@ -14,7 +14,7 @@ const fallbackContent = `
 
 ## Artikel 1 — Definities
 
-1. **SiteProof:** de online dienst voor geautomatiseerde WCAG-toegankelijkheidsaudits, aangeboden door Webser, gevestigd in Nederland, KvK-nummer [KVK_NUMMER].
+1. **SiteProof:** de online dienst voor geautomatiseerde WCAG-toegankelijkheidsaudits, aangeboden door Webser, gevestigd in Nederland, KvK-nummer 93875568.
 2. **Klant:** de natuurlijke persoon of rechtspersoon die een account aanmaakt en/of een abonnement afsluit bij SiteProof.
 3. **Dienst:** het scannen van websites op WCAG 2.1 AA compliance, het genereren van rapporten, en alle bijbehorende functionaliteiten.
 4. **Account:** de persoonlijke omgeving van de Klant op het SiteProof platform.

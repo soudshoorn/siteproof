@@ -17,7 +17,7 @@ const fallbackContent = `
 SiteProof is een product van Webser, gevestigd in Nederland.
 
 - **Bedrijfsnaam:** Webser
-- **KvK-nummer:** [KVK_NUMMER]
+- **KvK-nummer:** 93875568
 - **Contactpersoon:** Senna Oudshoorn
 - **E-mail:** privacy@siteproof.nl
 

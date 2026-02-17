@@ -79,7 +79,7 @@ export default function AdminSettingsPage() {
             </div>
             <div className="space-y-2">
               <Label>KvK-nummer</Label>
-              <Input defaultValue="[KVK_NUMMER]" disabled />
+              <Input defaultValue="93875568" disabled />
             </div>
             <p className="text-xs text-muted-foreground">
               Pas deze waarden aan in je .env bestand.

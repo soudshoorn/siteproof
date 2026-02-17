@@ -1025,4 +1025,108 @@ export const wcagCriteriaNL: Record<string, { title: string; description: string
     title: "Naam, rol, waarde",
     description: "Alle interface-elementen moeten een toegankelijke naam, rol en waarde hebben.",
   },
+  "1.2.3": {
+    title: "Audiodescriptie of media-alternatief (vooraf opgenomen)",
+    description: "Vooraf opgenomen video moet een audiodescriptie of volledig tekstalternatief hebben.",
+  },
+  "1.3.2": {
+    title: "Betekenisvolle volgorde",
+    description: "De leesvolgorde van de inhoud moet logisch en betekenisvol zijn in de code.",
+  },
+  "1.3.3": {
+    title: "Zintuiglijke kenmerken",
+    description: "Instructies mogen niet uitsluitend afhankelijk zijn van zintuiglijke kenmerken zoals vorm, kleur, grootte of positie.",
+  },
+  "1.4.5": {
+    title: "Afbeeldingen van tekst",
+    description: "Gebruik echte tekst in plaats van afbeeldingen van tekst, tenzij essentieel.",
+  },
+  "1.4.10": {
+    title: "Reflow",
+    description: "Inhoud moet zonder horizontaal scrollen bekeken kunnen worden bij een breedte van 320 CSS-pixels.",
+  },
+  "1.4.11": {
+    title: "Contrast van niet-tekstuele inhoud",
+    description: "Interface-elementen en grafische objecten moeten een contrastverhouding van minimaal 3:1 hebben.",
+  },
+  "1.4.13": {
+    title: "Inhoud bij hover of focus",
+    description: "Extra inhoud die verschijnt bij hover of focus moet zichtbaar blijven en te sluiten zijn.",
+  },
+  "2.1.2": {
+    title: "Geen toetsenbordval",
+    description: "De focus mag niet vastlopen in een onderdeel van de pagina via het toetsenbord.",
+  },
+  "2.1.4": {
+    title: "Sneltoetsen met een enkel teken",
+    description: "Sneltoetsen die uit een enkel teken bestaan moeten uit te schakelen of aan te passen zijn.",
+  },
+  "2.3.1": {
+    title: "Drie flitsen of onder drempelwaarde",
+    description: "Pagina's mogen geen elementen bevatten die meer dan drie keer per seconde flitsen.",
+  },
+  "2.4.4": {
+    title: "Linkdoel (in context)",
+    description: "Het doel van elke link moet duidelijk zijn uit de linktekst of de directe context.",
+  },
+  "2.4.5": {
+    title: "Meerdere manieren",
+    description: "Er moet meer dan één manier zijn om een pagina te vinden binnen de website.",
+  },
+  "2.4.6": {
+    title: "Koppen en labels",
+    description: "Koppen en labels moeten het onderwerp of doel beschrijven.",
+  },
+  "2.4.7": {
+    title: "Focus zichtbaar",
+    description: "Het toetsenbordfocus moet zichtbaar zijn op alle interactieve elementen.",
+  },
+  "2.5.1": {
+    title: "Aanwijzergebaren",
+    description: "Functionaliteit met complexe gebaren moet ook met een enkele aanwijzer bediend kunnen worden.",
+  },
+  "2.5.2": {
+    title: "Aanwijzerannulering",
+    description: "Functionaliteit die bediend wordt met een enkele aanwijzer mag niet alleen op het down-event afgaan.",
+  },
+  "2.5.4": {
+    title: "Bewegingsactivering",
+    description: "Functionaliteit die door beweging wordt geactiveerd moet ook via de interface bediend kunnen worden.",
+  },
+  "3.2.1": {
+    title: "Bij focus",
+    description: "Wanneer een element focus ontvangt mag er geen onverwachte contextverandering plaatsvinden.",
+  },
+  "3.2.2": {
+    title: "Bij invoer",
+    description: "Het wijzigen van een formulierinvoer mag geen onverwachte contextverandering veroorzaken.",
+  },
+  "3.2.3": {
+    title: "Consistente navigatie",
+    description: "Navigatiemechanismen die op meerdere pagina's voorkomen moeten in dezelfde volgorde staan.",
+  },
+  "3.2.4": {
+    title: "Consistente identificatie",
+    description: "Elementen met dezelfde functionaliteit moeten consistent worden geïdentificeerd.",
+  },
+  "3.3.1": {
+    title: "Foutidentificatie",
+    description: "Als een invoerfout wordt gedetecteerd, moet het foutieve item worden geïdentificeerd en de fout in tekst worden beschreven.",
+  },
+  "3.3.2": {
+    title: "Labels of instructies",
+    description: "Labels of instructies moeten worden verstrekt wanneer inhoud invoer van de gebruiker vereist.",
+  },
+  "3.3.3": {
+    title: "Foutsuggestie",
+    description: "Als een invoerfout wordt gedetecteerd en suggesties beschikbaar zijn, moeten deze aan de gebruiker worden getoond.",
+  },
+  "3.3.4": {
+    title: "Foutpreventie (juridisch, financieel, gegevens)",
+    description: "Bij juridische, financiële of gegevenstransacties moeten invoeren omkeerbaar, controleerbaar of bevestigbaar zijn.",
+  },
+  "4.1.3": {
+    title: "Statusberichten",
+    description: "Statusberichten moeten programmatisch bepaald kunnen worden zonder dat ze focus ontvangen.",
+  },
 };

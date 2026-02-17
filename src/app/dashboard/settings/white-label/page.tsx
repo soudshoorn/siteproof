@@ -29,7 +29,7 @@ export default async function WhiteLabelSettingsPage() {
           <div>
             <div className="flex items-center justify-center gap-2">
               <p className="text-lg font-semibold">White-label branding</p>
-              <Badge variant="secondary">Coming soon</Badge>
+              <Badge variant="secondary">Binnenkort</Badge>
             </div>
             <p className="mt-2 max-w-md text-sm text-muted-foreground">
               Binnenkort kun je je eigen logo, kleuren en domein instellen.
