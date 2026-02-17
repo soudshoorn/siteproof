@@ -215,17 +215,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
 
               {/* Content */}
               <div
-                className="prose prose-invert prose-lg mt-12 max-w-none
-                  prose-headings:scroll-mt-24 prose-headings:font-bold prose-headings:tracking-tight
-                  prose-h2:mt-12 prose-h2:mb-4 prose-h2:text-2xl
-                  prose-h3:mt-8 prose-h3:mb-3 prose-h3:text-xl
-                  prose-p:leading-relaxed prose-p:text-zinc-300
-                  prose-li:text-zinc-300 prose-li:leading-relaxed
-                  prose-strong:text-white
-                  prose-a:text-primary prose-a:no-underline hover:prose-a:underline
-                  prose-blockquote:border-primary/50 prose-blockquote:text-zinc-400
-                  prose-code:text-primary prose-code:bg-primary/10 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:before:content-none prose-code:after:content-none
-                  prose-img:rounded-lg"
+                className="blog-content mt-12 max-w-none"
                 dangerouslySetInnerHTML={{ __html: htmlContent }}
               />
             </div>

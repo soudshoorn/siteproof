@@ -21,21 +21,7 @@ export function LegalPage({ title, content }: LegalPageProps) {
         <article>
           <h1 className="sr-only">{title}</h1>
           <div
-            className="prose prose-invert prose-sm sm:prose-base max-w-none
-              prose-headings:font-bold prose-headings:text-foreground
-              prose-h1:text-2xl prose-h1:sm:text-3xl prose-h1:mb-6
-              prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-3
-              prose-h3:text-lg prose-h3:mt-6 prose-h3:mb-2
-              prose-p:text-muted-foreground prose-p:leading-relaxed
-              prose-li:text-muted-foreground
-              prose-a:text-primary prose-a:underline prose-a:underline-offset-2
-              prose-strong:text-foreground
-              prose-em:text-muted-foreground
-              prose-table:text-sm
-              prose-th:text-left prose-th:text-foreground prose-th:font-semibold prose-th:p-2 prose-th:border-b prose-th:border-border/40
-              prose-td:p-2 prose-td:text-muted-foreground prose-td:border-b prose-td:border-border/20
-              prose-code:text-primary prose-code:bg-primary/10 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-xs
-            "
+            className="blog-content max-w-none"
             dangerouslySetInnerHTML={{ __html: html }}
           />
         </article>
