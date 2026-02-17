@@ -95,7 +95,14 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
       .replace(/\s+/g, "-");
     return `<h${depth} id="${id}">${text}</h${depth}>`;
   };
-  const htmlContent = await marked(post.content, { renderer, breaks: true });
+
+  // The blog editor uses a plain textarea where single newlines are used
+  // as paragraph breaks. Standard markdown requires double newlines for
+  // paragraphs. Convert single \n to \n\n, but preserve already-double
+  // newlines and don't break markdown block syntax (headings, lists, etc.)
+  const processedContent = post.content.replace(/\n(?!\n)/g, "\n\n");
+
+  const htmlContent = await marked(processedContent, { renderer });
 
   // Fetch related posts
   const relatedPosts = await prisma.blogPost.findMany({
