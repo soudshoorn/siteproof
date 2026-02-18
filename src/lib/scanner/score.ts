@@ -1,38 +1,66 @@
 import type { IssueSeverity } from "@prisma/client";
 
+/** Base deduction per unique rule violation */
 const SEVERITY_WEIGHTS: Record<IssueSeverity, number> = {
-  CRITICAL: 10,
-  SERIOUS: 5,
-  MODERATE: 2,
-  MINOR: 0.5,
+  CRITICAL: 15,
+  SERIOUS: 8,
+  MODERATE: 3,
+  MINOR: 1,
 };
+
+/**
+ * Extra deduction per additional element instance of the same rule.
+ * Capped so a single widespread rule can't push the score to 0 alone,
+ * but multiple instances DO hurt more than a single one.
+ */
+const INSTANCE_PENALTY: Record<IssueSeverity, number> = {
+  CRITICAL: 2,
+  SERIOUS: 1,
+  MODERATE: 0.5,
+  MINOR: 0.1,
+};
+
+/** Max extra deduction from instances per rule (prevents one rule from tanking everything) */
+const MAX_INSTANCE_PENALTY_PER_RULE = 15;
 
 /**
  * Calculate the accessibility score for a set of issues.
  *
- * Deductions are based on **unique rule types** (axeRuleId), not individual
- * element instances.  A site with 50 color-contrast violations still only gets
- * one deduction for the color-contrast rule.  This prevents a single widespread
- * issue from tanking the score to 0.
+ * Each unique rule gets a base deduction based on severity, plus a smaller
+ * penalty for each additional element instance. This means a site with
+ * 50 color-contrast failures scores worse than one with 2, but the penalty
+ * is capped per rule to keep it fair.
  */
 export function calculateScore(
   issues: { severity: IssueSeverity; axeRuleId: string }[]
 ): number {
-  // Deduplicate by axeRuleId — keep the highest severity per rule
-  const ruleMap = new Map<string, IssueSeverity>();
+  // Group by rule: track severity (highest) and instance count
+  const ruleMap = new Map<string, { severity: IssueSeverity; count: number }>();
   for (const issue of issues) {
     const existing = ruleMap.get(issue.axeRuleId);
-    if (!existing || SEVERITY_WEIGHTS[issue.severity] > SEVERITY_WEIGHTS[existing]) {
-      ruleMap.set(issue.axeRuleId, issue.severity);
+    if (!existing) {
+      ruleMap.set(issue.axeRuleId, { severity: issue.severity, count: 1 });
+    } else {
+      existing.count++;
+      if (SEVERITY_WEIGHTS[issue.severity] > SEVERITY_WEIGHTS[existing.severity]) {
+        existing.severity = issue.severity;
+      }
     }
   }
 
-  const deductions = Array.from(ruleMap.values()).reduce(
-    (total, severity) => total + SEVERITY_WEIGHTS[severity],
-    0
-  );
+  let totalDeduction = 0;
+  for (const { severity, count } of ruleMap.values()) {
+    // Base deduction for the rule existing at all
+    const base = SEVERITY_WEIGHTS[severity];
+    // Extra penalty for multiple instances (count - 1 because first is covered by base)
+    const instancePenalty = Math.min(
+      (count - 1) * INSTANCE_PENALTY[severity],
+      MAX_INSTANCE_PENALTY_PER_RULE
+    );
+    totalDeduction += base + instancePenalty;
+  }
 
-  return Math.max(0, Math.min(100, 100 - deductions));
+  return Math.max(0, Math.min(100, Math.round(100 - totalDeduction)));
 }
 
 /**

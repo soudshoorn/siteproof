@@ -335,6 +335,19 @@ export function ShareableScanResult({
         </a>
       </div>
 
+      {/* 1-page warning banner */}
+      <div className="flex items-center gap-3 rounded-lg border border-severity-serious/30 bg-severity-serious/5 px-4 py-3">
+        <AlertTriangle className="size-5 shrink-0 text-severity-serious" />
+        <p className="text-sm">
+          <strong>Let op:</strong> dit is een scan van <strong>slechts 1 pagina</strong>.
+          {estimatedPages && estimatedPages > 1 ? (
+            <> Je website heeft naar schatting <strong>{estimatedPages}+ pagina&apos;s</strong> — de werkelijke score is waarschijnlijk <strong>lager</strong>.</>
+          ) : (
+            <> Je website heeft waarschijnlijk meer pagina&apos;s met extra problemen — de werkelijke score is waarschijnlijk <strong>lager</strong>.</>
+          )}
+        </p>
+      </div>
+
       {/* Score card */}
       <Card className="overflow-hidden">
         <CardContent className="flex flex-col items-center gap-6 p-8 sm:flex-row">
@@ -346,7 +359,7 @@ export function ShareableScanResult({
             <p className="text-sm text-muted-foreground">
               {totalIssues === 0
                 ? nl.scan.noIssuesMessage
-                : `${totalIssues} ${nl.scan.issuesFound}`}
+                : `${totalIssues} ${nl.scan.issuesFound} op deze pagina`}
             </p>
 
             {/* Issue count badges */}
@@ -393,10 +406,19 @@ export function ShareableScanResult({
                   className="border-score-good/30 text-score-good"
                 >
                   <CheckCircle2 className="mr-1 size-3" />
-                  Geen issues gevonden
+                  Geen issues gevonden op deze pagina
                 </Badge>
               )}
             </div>
+
+            {/* EAA urgency warning */}
+            {(score ?? 0) < 90 && (
+              <div className="mt-4 rounded-md bg-destructive/10 px-3 py-2">
+                <p className="text-xs font-medium text-destructive">
+                  Je website voldoet niet aan de EAA-vereisten. Sinds 28 juni 2025 riskeer je boetes tot €900.000.
+                </p>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -630,18 +652,32 @@ export function ShareableScanResult({
         </div>
       )}
 
-      {/* Estimated pages nudge */}
-      {estimatedPages && estimatedPages > 1 && (
-        <div className="rounded-xl border border-border/50 bg-muted/30 p-5 text-center">
-          <p className="text-sm text-muted-foreground">
-            Deze scan controleerde <strong>1 pagina</strong>. Je website heeft waarschijnlijk{" "}
-            <strong>{estimatedPages}+ pagina&apos;s</strong> met problemen.{" "}
-            <a href="/pricing" className="font-medium text-primary hover:underline">
-              Upgrade om je hele website te scannen.
+      {/* Full scan CTA — prominent */}
+      <div className="rounded-xl border border-primary/30 bg-primary/5 p-6 text-center">
+        <h3 className="text-base font-semibold">
+          {estimatedPages && estimatedPages > 1
+            ? `Je website heeft ${estimatedPages}+ pagina's — wij scanden er slechts 1`
+            : "Dit was slechts 1 pagina — scan je hele website"
+          }
+        </h3>
+        <p className="mt-2 text-sm text-muted-foreground">
+          De meeste toegankelijkheidsproblemen zitten op subpagina&apos;s (formulieren, productpagina&apos;s, checkout).
+          Scan je volledige website om je echte score te zien.
+        </p>
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-center">
+          <Button asChild>
+            <a href="/auth/register?from=scan">
+              Gratis hele website scannen
+              <ArrowRight className="ml-1 size-4" />
             </a>
-          </p>
+          </Button>
+          <Button variant="outline" asChild>
+            <a href="/pricing?from=scan">
+              Bekijk plannen
+            </a>
+          </Button>
         </div>
-      )}
+      </div>
 
       {/* Share + CTA */}
       <div className="space-y-4 rounded-xl border border-border/50 bg-card/50 p-6">

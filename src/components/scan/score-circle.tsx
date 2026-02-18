@@ -17,14 +17,14 @@ const sizes = {
 };
 
 function getScoreColor(score: number): string {
-  if (score >= 80) return "text-score-good";
-  if (score >= 50) return "text-score-moderate";
+  if (score >= 90) return "text-score-good";
+  if (score >= 70) return "text-score-moderate";
   return "text-score-bad";
 }
 
 function getStrokeColor(score: number): string {
-  if (score >= 80) return "stroke-score-good";
-  if (score >= 50) return "stroke-score-moderate";
+  if (score >= 90) return "stroke-score-good";
+  if (score >= 70) return "stroke-score-moderate";
   return "stroke-score-bad";
 }
 
