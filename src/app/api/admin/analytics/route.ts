@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
     cancelledOrgs,
     topPosts,
     mrrHistory,
+    eventFunnel,
   ] = await Promise.all([
     // Quick scans per day (scans without a startedById = anonymous quick scans)
     prisma.scan.groupBy({
@@ -65,6 +66,25 @@ export async function GET(request: NextRequest) {
       where: { planType: { not: "FREE" } },
       select: { planType: true, createdAt: true },
     }),
+
+    // Event-based conversion funnel
+    Promise.all([
+      prisma.analyticsEvent.count({ where: { event: "quick_scan_started", createdAt: { gte: startDate } } }),
+      prisma.analyticsEvent.count({ where: { event: "quick_scan_completed", createdAt: { gte: startDate } } }),
+      prisma.analyticsEvent.count({ where: { event: "signup_from_scan", createdAt: { gte: startDate } } }),
+      prisma.analyticsEvent.count({ where: { event: "upgrade_clicked", createdAt: { gte: startDate } } }),
+      prisma.analyticsEvent.count({ where: { event: "checkout_started", createdAt: { gte: startDate } } }),
+      prisma.analyticsEvent.count({ where: { event: "checkout_completed", createdAt: { gte: startDate } } }),
+      prisma.analyticsEvent.count({ where: { event: "scan_limit_hit", createdAt: { gte: startDate } } }),
+    ]).then(([scansStarted, scansCompleted, signupsFromScan, upgradeClicked, checkoutStarted, checkoutCompleted, scanLimitHit]) => ({
+      scansStarted,
+      scansCompleted,
+      signupsFromScan,
+      upgradeClicked,
+      checkoutStarted,
+      checkoutCompleted,
+      scanLimitHit,
+    })),
   ]);
 
   // Calculate total active users
@@ -89,6 +109,7 @@ export async function GET(request: NextRequest) {
     quickScansByDay,
     signupsByDay,
     funnel,
+    eventFunnel,
     cancelledOrgs,
     topPosts,
     totalUsers,

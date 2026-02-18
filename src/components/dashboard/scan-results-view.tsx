@@ -13,6 +13,8 @@ import { nl } from "@/lib/i18n/nl";
 import { formatDate, formatRelativeTime } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { EaaComplianceCard } from "@/components/scan/eaa-compliance-card";
+import { getFeatureGates, type PlanType, getPlanDisplayName } from "@/lib/features";
+import { UpgradeBanner, UpgradeInlineHint } from "@/components/upgrade-banner";
 import {
   ArrowLeft,
   ExternalLink,
@@ -27,6 +29,9 @@ import {
   Clock,
   User,
   Loader2,
+  Lock,
+  Sparkles,
+  TrendingUp,
 } from "lucide-react";
 
 type Severity = "CRITICAL" | "SERIOUS" | "MODERATE" | "MINOR";
@@ -143,7 +148,8 @@ function displayUrl(url: string): string {
   }
 }
 
-export function ScanResultsView({ scan, eaaData }: { scan: ScanData; eaaData?: EaaData }) {
+export function ScanResultsView({ scan, eaaData, planType = "FREE" }: { scan: ScanData; eaaData?: EaaData; planType?: PlanType }) {
+  const gates = getFeatureGates(planType);
   const router = useRouter();
   const [pollData, setPollData] = useState<{
     status: string;
@@ -305,18 +311,30 @@ export function ScanResultsView({ scan, eaaData }: { scan: ScanData; eaaData?: E
           </div>
           {scan.status === "COMPLETED" && (
             <div className="flex gap-2">
-              <Button
-                variant="outline"
-                onClick={handleExportPdf}
-                disabled={exportingPdf}
-              >
-                {exportingPdf ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <FileDown className="size-4" />
-                )}
-                {nl.dashboard.exportPdf}
-              </Button>
+              {gates.pdfExport ? (
+                <Button
+                  variant="outline"
+                  onClick={handleExportPdf}
+                  disabled={exportingPdf}
+                >
+                  {exportingPdf ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <FileDown className="size-4" />
+                  )}
+                  {nl.dashboard.exportPdf}
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  disabled
+                  title="PDF export — beschikbaar vanaf Starter (\u20AC49/mo)"
+                  className="cursor-not-allowed opacity-50"
+                >
+                  <Lock className="size-4" />
+                  {nl.dashboard.exportPdf}
+                </Button>
+              )}
               <Button variant="outline" asChild>
                 <a href={scan.website.url} target="_blank" rel="noopener noreferrer">
                   <ExternalLink className="size-4" />
@@ -560,146 +578,166 @@ export function ScanResultsView({ scan, eaaData }: { scan: ScanData; eaaData?: E
                   </CardContent>
                 </Card>
               ) : (
-                <ul className="space-y-3">
-                  {groupedIssues.map(({ rule, instances }) => {
-                    const config = severityConfig[rule.severity];
-                    const Icon = config.icon;
-                    const expanded = expandedIssues.has(rule.axeRuleId);
-                    const count = instances.length;
+                <>
+                  <ul className="space-y-3">
+                    {groupedIssues.map(({ rule, instances }, issueIndex) => {
+                      const config = severityConfig[rule.severity];
+                      const Icon = config.icon;
+                      const expanded = expandedIssues.has(rule.axeRuleId);
+                      const count = instances.length;
+                      const canShowFixSuggestion = gates.showAllFixSuggestions || issueIndex < gates.maxFreeFixSuggestions;
 
-                    return (
-                      <li key={rule.axeRuleId}>
-                        <button
-                          onClick={() => toggleIssue(rule.axeRuleId)}
-                          className={cn(
-                            "w-full rounded-lg border p-4 text-left transition-colors",
-                            config.border,
-                            expanded ? config.bg : "hover:bg-muted/30"
-                          )}
-                          aria-expanded={expanded}
-                        >
-                          <div className="flex items-start gap-3">
-                            <Icon
-                              className={cn("mt-0.5 size-4 shrink-0", config.color)}
-                            />
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className={cn(
-                                    "text-xs font-medium",
-                                    config.color
-                                  )}
-                                >
-                                  {config.label}
-                                </span>
-                                {rule.wcagCriteria.length > 0 && (
-                                  <span className="text-xs text-muted-foreground">
-                                    WCAG {rule.wcagCriteria.join(", ")}
+                      return (
+                        <li key={rule.axeRuleId}>
+                          <button
+                            onClick={() => toggleIssue(rule.axeRuleId)}
+                            className={cn(
+                              "w-full rounded-lg border p-4 text-left transition-colors",
+                              config.border,
+                              expanded ? config.bg : "hover:bg-muted/30"
+                            )}
+                            aria-expanded={expanded}
+                          >
+                            <div className="flex items-start gap-3">
+                              <Icon
+                                className={cn("mt-0.5 size-4 shrink-0", config.color)}
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    className={cn(
+                                      "text-xs font-medium",
+                                      config.color
+                                    )}
+                                  >
+                                    {config.label}
                                   </span>
-                                )}
-                                {rule.wcagLevel && (
-                                  <Badge variant="outline" className="text-[10px] px-1 py-0">
-                                    {rule.wcagLevel}
-                                  </Badge>
+                                  {rule.wcagCriteria.length > 0 && (
+                                    <span className="text-xs text-muted-foreground">
+                                      WCAG {rule.wcagCriteria.join(", ")}
+                                    </span>
+                                  )}
+                                  {rule.wcagLevel && (
+                                    <Badge variant="outline" className="text-[10px] px-1 py-0">
+                                      {rule.wcagLevel}
+                                    </Badge>
+                                  )}
+                                  {count > 1 && (
+                                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                      {count}x
+                                    </Badge>
+                                  )}
+                                </div>
+                                <p className="mt-1 text-sm font-medium">
+                                  {rule.description}
+                                </p>
+                                {count === 1 && (
+                                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                    {displayUrl(rule.pageUrl)}
+                                  </p>
                                 )}
                                 {count > 1 && (
-                                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                                    {count}x
-                                  </Badge>
+                                  <p className="mt-0.5 text-xs text-muted-foreground">
+                                    {count} elementen op{" "}
+                                    {new Set(instances.map((i) => i.pageUrl)).size === 1
+                                      ? displayUrl(instances[0].pageUrl)
+                                      : `${new Set(instances.map((i) => i.pageUrl)).size} pagina's`}
+                                  </p>
                                 )}
                               </div>
-                              <p className="mt-1 text-sm font-medium">
-                                {rule.description}
-                              </p>
-                              {count === 1 && (
-                                <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                                  {displayUrl(rule.pageUrl)}
-                                </p>
-                              )}
-                              {count > 1 && (
-                                <p className="mt-0.5 text-xs text-muted-foreground">
-                                  {count} elementen op{" "}
-                                  {new Set(instances.map((i) => i.pageUrl)).size === 1
-                                    ? displayUrl(instances[0].pageUrl)
-                                    : `${new Set(instances.map((i) => i.pageUrl)).size} pagina's`}
-                                </p>
+                              {expanded ? (
+                                <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+                              ) : (
+                                <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
                               )}
                             </div>
-                            {expanded ? (
-                              <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
-                            ) : (
-                              <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-                            )}
-                          </div>
-                        </button>
+                          </button>
 
-                        {expanded && (
-                          <div
-                            className={cn(
-                              "mt-1 rounded-b-lg border border-t-0 p-4 space-y-4",
-                              config.border,
-                              config.bg
-                            )}
-                          >
-                            {/* Why it matters */}
-                            <div>
-                              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                                Waarom is dit belangrijk?
-                              </p>
-                              <p className="mt-1 text-sm">{rule.helpText}</p>
-                            </div>
+                          {expanded && (
+                            <div
+                              className={cn(
+                                "mt-1 rounded-b-lg border border-t-0 p-4 space-y-4",
+                                config.border,
+                                config.bg
+                              )}
+                            >
+                              {/* Why it matters */}
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                  Waarom is dit belangrijk?
+                                </p>
+                                <p className="mt-1 text-sm">{rule.helpText}</p>
+                              </div>
 
-                            {/* Fix suggestion */}
-                            <div>
-                              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                                Hoe op te lossen
-                              </p>
-                              <p className="mt-1 text-sm">{rule.fixSuggestion}</p>
-                            </div>
+                              {/* Fix suggestion — gated for FREE after first N */}
+                              {canShowFixSuggestion ? (
+                                <div>
+                                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                    Hoe op te lossen
+                                  </p>
+                                  <p className="mt-1 text-sm">{rule.fixSuggestion}</p>
+                                </div>
+                              ) : (
+                                <UpgradeInlineHint
+                                  text="Upgrade naar Starter om de fix-suggestie te zien"
+                                  plan="Starter"
+                                />
+                              )}
 
-                            {/* Affected elements */}
-                            <div>
-                              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                                <Code className="mr-1 inline size-3" />
-                                Getroffen elementen ({count})
-                              </p>
-                              <ul className="space-y-2">
-                                {instances.map((instance) => (
-                                  <li
-                                    key={instance.id}
-                                    className="rounded-md bg-muted/50 p-3 space-y-1"
-                                  >
-                                    {instance.htmlElement && (
-                                      <pre className="overflow-x-auto font-mono text-xs">
-                                        {instance.htmlElement}
-                                      </pre>
-                                    )}
-                                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                                      {instance.cssSelector && (
-                                        <code className="rounded bg-muted px-1.5 py-0.5 font-mono">
-                                          {instance.cssSelector}
-                                        </code>
+                              {/* Affected elements */}
+                              <div>
+                                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                  <Code className="mr-1 inline size-3" />
+                                  Getroffen elementen ({count})
+                                </p>
+                                <ul className="space-y-2">
+                                  {instances.map((instance) => (
+                                    <li
+                                      key={instance.id}
+                                      className="rounded-md bg-muted/50 p-3 space-y-1"
+                                    >
+                                      {instance.htmlElement && (
+                                        <pre className="overflow-x-auto font-mono text-xs">
+                                          {instance.htmlElement}
+                                        </pre>
                                       )}
-                                      <a
-                                        href={instance.pageUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-1 text-primary hover:underline"
-                                      >
-                                        {displayUrl(instance.pageUrl)}
-                                        <ExternalLink className="size-3" />
-                                      </a>
-                                    </div>
-                                  </li>
-                                ))}
-                              </ul>
+                                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                                        {instance.cssSelector && (
+                                          <code className="rounded bg-muted px-1.5 py-0.5 font-mono">
+                                            {instance.cssSelector}
+                                          </code>
+                                        )}
+                                        <a
+                                          href={instance.pageUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center gap-1 text-primary hover:underline"
+                                        >
+                                          {displayUrl(instance.pageUrl)}
+                                          <ExternalLink className="size-3" />
+                                        </a>
+                                      </div>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
                             </div>
-                          </div>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+
+                  {/* Fix suggestion gate banner — shown after the list for FREE users */}
+                  {!gates.showAllFixSuggestions && groupedIssues.length > gates.maxFreeFixSuggestions && (
+                    <UpgradeBanner
+                      feature="fixSuggestions"
+                      count={groupedIssues.length - gates.maxFreeFixSuggestions}
+                      inline
+                      className="mt-4"
+                    />
+                  )}
+                </>
               )}
             </TabsContent>
 

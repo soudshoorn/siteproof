@@ -9,17 +9,43 @@ import { calculateEaaCompliance, getEaaStatus } from "@/lib/eaa/mapping";
 
 /**
  * Normalize DB result format to UI format.
+ * Maintains the gated structure: topIssues (full) + remainingIssues (limited)
  */
 function normalizeResults(raw: Record<string, unknown> | null): Record<string, unknown> | null {
   if (!raw) return null;
-  if ("issues" in raw) return raw;
 
   const topIssues = (raw.topIssues as unknown[]) ?? [];
+  const remainingIssues = (raw.remainingIssues as unknown[]) ?? [];
+  const blurredCount = (raw.blurredCount as number) ?? 0;
+  const estimatedPages = (raw.estimatedPages as number | null) ?? null;
   const issueCounts = (raw.issueCounts as Record<string, number>) ?? {};
+
+  // Legacy format compatibility: if no remainingIssues, treat as old format
+  if (!("remainingIssues" in raw) && "issues" in raw) {
+    return {
+      pageTitle: raw.title ?? null,
+      issues: raw.issues,
+      topIssues: [],
+      remainingIssues: [],
+      blurredCount: 0,
+      estimatedPages: null,
+      totalIssues: (raw.totalIssues as number) ?? 0,
+      criticalIssues: (raw.criticalIssues as number) ?? 0,
+      seriousIssues: (raw.seriousIssues as number) ?? 0,
+      moderateIssues: (raw.moderateIssues as number) ?? 0,
+      minorIssues: (raw.minorIssues as number) ?? 0,
+      uniqueRules: (raw.uniqueRules as number) ?? 0,
+      loadTime: raw.loadTime ?? null,
+      failedWcagCriteria: raw.failedWcagCriteria ?? [],
+    };
+  }
 
   return {
     pageTitle: raw.title ?? null,
-    issues: topIssues,
+    topIssues,
+    remainingIssues,
+    blurredCount,
+    estimatedPages,
     totalIssues: issueCounts.total ?? 0,
     criticalIssues: issueCounts.critical ?? 0,
     seriousIssues: issueCounts.serious ?? 0,

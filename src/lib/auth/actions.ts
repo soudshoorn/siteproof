@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/db";
+import { trackEvent } from "@/lib/analytics";
 
 function generateSlug(name: string): string {
   return name
@@ -102,6 +103,7 @@ export async function registerAction(formData: FormData): Promise<AuthResult> {
   const password = formData.get("password") as string;
   const confirmPassword = formData.get("confirmPassword") as string;
   const plan = (formData.get("plan") as string)?.trim().toLowerCase() || "";
+  const from = (formData.get("from") as string)?.trim() || "";
 
   if (!email || !password) {
     return { error: "Vul alle verplichte velden in." };
@@ -124,7 +126,13 @@ export async function registerAction(formData: FormData): Promise<AuthResult> {
     password,
     options: {
       data: { full_name: fullName },
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback${selectedPlan ? `?plan=${selectedPlan}` : ""}`,
+      emailRedirectTo: (() => {
+        const params = new URLSearchParams();
+        if (selectedPlan) params.set("plan", selectedPlan);
+        if (from) params.set("from", from);
+        const qs = params.toString();
+        return `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback${qs ? `?${qs}` : ""}`;
+      })(),
     },
   });
 
@@ -137,7 +145,10 @@ export async function registerAction(formData: FormData): Promise<AuthResult> {
 
   // If email confirmation is disabled, user is immediately logged in
   if (data.user && data.session) {
-    await syncUser(data.user.id, data.user.email!, fullName);
+    const user = await syncUser(data.user.id, data.user.email!, fullName);
+    if (from === "scan") {
+      trackEvent("signup_from_scan", { userId: user.id }).catch(() => {});
+    }
     // Redirect to checkout if a paid plan was selected
     if (selectedPlan) {
       redirect(`/dashboard/settings/billing?upgrade=${selectedPlan}`);

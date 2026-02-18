@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { jsonSuccess, jsonError } from "@/lib/api/helpers";
 import { after } from "next/server";
+import { trackEvent } from "@/lib/analytics";
 
 const SCANNER_SERVICE_URL = process.env.SCANNER_SERVICE_URL;
 const SCANNER_SECRET = process.env.SCANNER_SECRET || "";
@@ -67,30 +68,48 @@ async function performScan(scanId: string, url: string) {
       ruleCounts.set(issue.axeRuleId, (ruleCounts.get(issue.axeRuleId) || 0) + 1);
     }
 
-    const topIssues = uniqueIssues
-      .slice(0, 10)
-      .map((issue: {
-        axeRuleId: string;
-        severity: string;
-        description: string;
-        helpText: string;
-        fixSuggestion: string;
-        wcagCriteria: string[];
-        wcagLevel: string | null;
-        htmlElement: string | null;
-        cssSelector: string | null;
-      }) => ({
-        axeRuleId: issue.axeRuleId,
-        severity: issue.severity,
-        description: issue.description,
-        helpText: issue.helpText,
-        fixSuggestion: issue.fixSuggestion,
-        wcagCriteria: issue.wcagCriteria,
-        wcagLevel: issue.wcagLevel,
-        htmlElement: issue.htmlElement,
-        cssSelector: issue.cssSelector,
-        elementCount: ruleCounts.get(issue.axeRuleId) || 1,
-      }));
+    type IssueData = {
+      axeRuleId: string;
+      severity: string;
+      description: string;
+      helpText: string;
+      fixSuggestion: string;
+      wcagCriteria: string[];
+      wcagLevel: string | null;
+      htmlElement: string | null;
+      cssSelector: string | null;
+    };
+
+    const mapFullIssue = (issue: IssueData) => ({
+      axeRuleId: issue.axeRuleId,
+      severity: issue.severity,
+      description: issue.description,
+      helpText: issue.helpText,
+      fixSuggestion: issue.fixSuggestion,
+      wcagCriteria: issue.wcagCriteria,
+      wcagLevel: issue.wcagLevel,
+      htmlElement: issue.htmlElement,
+      cssSelector: issue.cssSelector,
+      elementCount: ruleCounts.get(issue.axeRuleId) || 1,
+    });
+
+    const mapLimitedIssue = (issue: IssueData) => ({
+      axeRuleId: issue.axeRuleId,
+      severity: issue.severity,
+      description: issue.description,
+      wcagCriteria: issue.wcagCriteria,
+      wcagLevel: issue.wcagLevel,
+      elementCount: ruleCounts.get(issue.axeRuleId) || 1,
+    });
+
+    // First 3 issues get full details (free value), rest are gated
+    const FREE_ISSUE_LIMIT = 3;
+    const topIssues = uniqueIssues.slice(0, FREE_ISSUE_LIMIT).map(mapFullIssue);
+    const remainingIssues = uniqueIssues.slice(FREE_ISSUE_LIMIT).map(mapLimitedIssue);
+    const blurredCount = remainingIssues.length;
+
+    // Also store all issues with full details for internal use (dashboard after signup)
+    const allIssuesFull = uniqueIssues.slice(0, 10).map(mapFullIssue);
 
     const counts = {
       critical: analysis.issues.filter((i: { severity: string }) => i.severity === "CRITICAL").length,
@@ -101,6 +120,9 @@ async function performScan(scanId: string, url: string) {
       uniqueRules: uniqueIssues.length,
     };
 
+    // Count internal links found on this page (for "estimated pages" nudge)
+    const estimatedPages = analysis.internalLinksCount ?? null;
+
     await prisma.quickScan.update({
       where: { id: scanId },
       data: {
@@ -110,10 +132,22 @@ async function performScan(scanId: string, url: string) {
           title: analysis.title,
           loadTime: analysis.loadTime,
           topIssues,
+          remainingIssues,
+          blurredCount,
+          allIssuesFull,
+          estimatedPages,
           issueCounts: counts,
           failedWcagCriteria: [...new Set(analysis.issues.flatMap((i: { wcagCriteria: string[] }) => i.wcagCriteria))] as string[],
         },
       },
+    });
+
+    await trackEvent("quick_scan_completed", {
+      scanId,
+      url,
+      score: analysis.score,
+      totalIssues: counts.total,
+      uniqueRules: counts.uniqueRules,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -179,6 +213,7 @@ export async function POST(request: Request) {
 
     // Run scan asynchronously after response is sent
     after(() => performScan(quickScan.id, url));
+    after(() => trackEvent("quick_scan_started", { url, scanId: quickScan.id }));
 
     // Return immediately so client can redirect to result page
     return jsonSuccess({

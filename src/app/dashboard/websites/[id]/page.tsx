@@ -7,6 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScoreCircle } from "@/components/scan/score-circle";
 import { StartScanButton } from "@/components/dashboard/start-scan-button";
+import { TrendPlaceholder } from "@/components/dashboard/trend-placeholder";
+import { getFeatureGates, type PlanType } from "@/lib/features";
 import { nl } from "@/lib/i18n/nl";
 import { formatDate, formatRelativeTime } from "@/lib/utils";
 import {
@@ -144,6 +146,38 @@ export default async function WebsiteDetailPage({
           </Card>
         </div>
       )}
+
+      {/* Trend chart — gated for FREE */}
+      {lastCompletedScan && (() => {
+        const planType = (organization?.planType ?? "FREE") as PlanType;
+        const gates = getFeatureGates(planType);
+
+        if (!gates.trendHistory) {
+          return <TrendPlaceholder />;
+        }
+
+        // TODO: Real trend chart for paid plans
+        return null;
+      })()}
+
+      {/* Pages scanned nudge for FREE users */}
+      {lastCompletedScan && (() => {
+        const planType = (organization?.planType ?? "FREE") as PlanType;
+        const gates = getFeatureGates(planType);
+
+        if (planType === "FREE" && lastCompletedScan.scannedPages > 0) {
+          return (
+            <div className="rounded-xl border border-border/50 bg-muted/30 p-4 text-center text-sm text-muted-foreground">
+              Je hebt <strong>{lastCompletedScan.scannedPages} van {gates.maxPagesPerScan} pagina&apos;s</strong> gescand.
+              Je website heeft waarschijnlijk meer pagina&apos;s met problemen.{" "}
+              <Link href="/pricing" className="font-medium text-primary hover:underline">
+                Upgrade om alles te scannen.
+              </Link>
+            </div>
+          );
+        }
+        return null;
+      })()}
 
       {/* Scan history */}
       <div>

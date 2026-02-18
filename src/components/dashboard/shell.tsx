@@ -16,6 +16,9 @@ import { Badge } from "@/components/ui/badge";
 import { nl } from "@/lib/i18n/nl";
 import { cn } from "@/lib/utils";
 import { logoutAction } from "@/lib/auth/actions";
+import { SidebarPlanCard } from "@/components/dashboard/sidebar-plan-card";
+import { type PlanType } from "@/lib/features";
+import { getFeatureGates } from "@/lib/features";
 import {
   Shield,
   LayoutDashboard,
@@ -29,6 +32,7 @@ import {
   X,
   LogOut,
   ChevronDown,
+  Lock,
 } from "lucide-react";
 
 interface DashboardShellProps {
@@ -46,14 +50,21 @@ interface DashboardShellProps {
   children: React.ReactNode;
 }
 
-const navItems = [
+const navItems: Array<{
+  href: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  exact: boolean;
+  gatedFeature?: keyof ReturnType<typeof getFeatureGates>;
+  gatedPlan?: string;
+}> = [
   { href: "/dashboard", label: nl.dashboard.overview, icon: LayoutDashboard, exact: true },
   { href: "/dashboard/websites", label: nl.dashboard.websites, icon: Globe, exact: false },
-  { href: "/dashboard/reports", label: nl.dashboard.reports, icon: FileText, exact: true },
+  { href: "/dashboard/reports", label: nl.dashboard.reports, icon: FileText, exact: true, gatedFeature: "pdfExport", gatedPlan: "Starter" },
   { href: "/dashboard/settings", label: nl.dashboard.settings, icon: Settings, exact: false },
   { href: "/dashboard/settings/billing", label: nl.dashboard.billing, icon: CreditCard, exact: true },
-  { href: "/dashboard/settings/white-label", label: nl.dashboard.whiteLabel, icon: Palette, exact: true },
-  { href: "/dashboard/settings/api", label: nl.dashboard.api, icon: Key, exact: true },
+  { href: "/dashboard/settings/white-label", label: nl.dashboard.whiteLabel, icon: Palette, exact: true, gatedFeature: "whitelabel", gatedPlan: "Bureau" },
+  { href: "/dashboard/settings/api", label: nl.dashboard.api, icon: Key, exact: true, gatedFeature: "apiAccess", gatedPlan: "Bureau" },
 ];
 
 export function DashboardShell({ user, organization, children }: DashboardShellProps) {
@@ -74,30 +85,49 @@ export function DashboardShell({ user, organization, children }: DashboardShellP
     return pathname.startsWith(href);
   }
 
+  const planType = (organization?.planType ?? "FREE") as PlanType;
+
+  const gates = getFeatureGates(planType);
+
   const sidebar = (
-    <nav className="flex flex-1 flex-col gap-1 p-4" aria-label="Dashboard navigatie">
-      {navItems.map((item) => {
-        const Icon = item.icon;
-        const active = isActive(item.href, item.exact);
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            onClick={() => setSidebarOpen(false)}
-            className={cn(
-              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-              active
-                ? "bg-primary/10 text-primary"
-                : "text-muted-foreground hover:bg-accent hover:text-foreground"
-            )}
-            aria-current={active ? "page" : undefined}
-          >
-            <Icon className="size-4" />
-            {item.label}
-          </Link>
-        );
-      })}
-    </nav>
+    <div className="flex flex-1 flex-col">
+      <nav className="flex flex-1 flex-col gap-1 p-4" aria-label="Dashboard navigatie">
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const active = isActive(item.href, item.exact);
+          const isLocked = item.gatedFeature ? !gates[item.gatedFeature] : false;
+
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={() => setSidebarOpen(false)}
+              className={cn(
+                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                active
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
+              )}
+              aria-current={active ? "page" : undefined}
+            >
+              <Icon className="size-4" />
+              <span className="flex-1">{item.label}</span>
+              {isLocked && (
+                <span className="flex items-center gap-1">
+                  <Lock className="size-3 text-muted-foreground/50" />
+                  {item.gatedPlan && (
+                    <Badge variant="outline" className="px-1 py-0 text-[9px] font-normal text-muted-foreground/60">
+                      {item.gatedPlan}
+                    </Badge>
+                  )}
+                </span>
+              )}
+            </Link>
+          );
+        })}
+      </nav>
+      <SidebarPlanCard planType={planType} />
+    </div>
   );
 
   return (

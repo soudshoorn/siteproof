@@ -285,3 +285,14 @@ model QuickScan {
 
   @@index([ipAddress, createdAt])
 }
+
+model AnalyticsEvent {
+  id        String   @id @default(uuid())
+  event     String
+  userId    String?
+  metadata  Json     @default("{}")
+  createdAt DateTime @default(now())
+
+  @@index([event, createdAt])
+  @@index([userId])
+}

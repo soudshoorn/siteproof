@@ -24,15 +24,24 @@ import {
   ShieldCheck,
   ShieldAlert,
   ShieldX,
+  Lock,
 } from "lucide-react";
 
-interface QuickScanIssue {
+interface FullIssue {
   description: string;
   severity: "CRITICAL" | "SERIOUS" | "MODERATE" | "MINOR";
   wcagCriteria: string[];
   fixSuggestion: string;
   helpText?: string;
   htmlElement?: string;
+  elementCount?: number;
+}
+
+interface LimitedIssue {
+  description: string;
+  severity: "CRITICAL" | "SERIOUS" | "MODERATE" | "MINOR";
+  wcagCriteria: string[];
+  elementCount?: number;
 }
 
 interface EaaDisplayData {
@@ -201,7 +210,26 @@ export function ShareableScanResult({
     });
   }
 
-  const issues = (results?.issues as QuickScanIssue[] | undefined) ?? [];
+  // Extract gated data
+  const topIssues = (results?.topIssues as FullIssue[] | undefined) ?? [];
+  const remainingIssues = (results?.remainingIssues as LimitedIssue[] | undefined) ?? [];
+  const blurredCount = (results?.blurredCount as number) ?? 0;
+  const estimatedPages = (results?.estimatedPages as number | null) ?? null;
+
+  // Legacy support: if old format with "issues" array
+  const legacyIssues = (results?.issues as FullIssue[] | undefined) ?? [];
+  const hasLegacyFormat = legacyIssues.length > 0 && topIssues.length === 0;
+  const displayTopIssues = hasLegacyFormat ? legacyIssues.slice(0, 3) : topIssues;
+  const displayRemainingIssues = hasLegacyFormat
+    ? legacyIssues.slice(3).map((i) => ({
+        description: i.description,
+        severity: i.severity,
+        wcagCriteria: i.wcagCriteria,
+        elementCount: i.elementCount,
+      }))
+    : remainingIssues;
+  const displayBlurredCount = hasLegacyFormat ? displayRemainingIssues.length : blurredCount;
+
   const totalIssues = (results?.totalIssues as number) ?? 0;
   const criticalIssues = (results?.criticalIssues as number) ?? 0;
   const seriousIssues = (results?.seriousIssues as number) ?? 0;
@@ -317,8 +345,8 @@ export function ShareableScanResult({
             )}
             <p className="text-sm text-muted-foreground">
               {totalIssues === 0
-                ? "Geen toegankelijkheidsproblemen gevonden op deze pagina."
-                : `${totalIssues} toegankelijkheidsproblemen gevonden op deze pagina.`}
+                ? nl.scan.noIssuesMessage
+                : `${totalIssues} ${nl.scan.issuesFound}`}
             </p>
 
             {/* Issue count badges */}
@@ -373,14 +401,14 @@ export function ShareableScanResult({
         </CardContent>
       </Card>
 
-      {/* Issues list */}
-      {issues.length > 0 && (
+      {/* Top issues — full details (FREE value) */}
+      {displayTopIssues.length > 0 && (
         <div>
           <h2 className="mb-4 text-lg font-semibold">
             {nl.scan.topIssues}
           </h2>
           <ul className="space-y-3">
-            {issues.map((issue, i) => {
+            {displayTopIssues.map((issue, i) => {
               const config = severityConfig[issue.severity];
               const Icon = config.icon;
               const expanded = expandedIssues.has(i);
@@ -436,14 +464,14 @@ export function ShareableScanResult({
                       {issue.helpText && (
                         <div>
                           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                            Waarom is dit belangrijk?
+                            {nl.scan.whyImportant}
                           </p>
                           <p className="mt-1 text-sm">{issue.helpText}</p>
                         </div>
                       )}
                       <div>
                         <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                          Hoe op te lossen
+                          {nl.scan.howToFix}
                         </p>
                         <p className="mt-1 text-sm">{issue.fixSuggestion}</p>
                       </div>
@@ -463,6 +491,89 @@ export function ShareableScanResult({
               );
             })}
           </ul>
+        </div>
+      )}
+
+      {/* Remaining issues — blurred/gated */}
+      {displayRemainingIssues.length > 0 && (
+        <div>
+          <h2 className="mb-4 text-lg font-semibold">
+            Overige problemen
+          </h2>
+          <div className="relative">
+            <ul className="space-y-3">
+              {displayRemainingIssues.slice(0, 5).map((issue, i) => {
+                const config = severityConfig[issue.severity];
+                const Icon = config.icon;
+
+                return (
+                  <li
+                    key={i}
+                    className={cn(
+                      "rounded-lg border p-4 opacity-60",
+                      config.border,
+                      i >= 2 && "blur-[2px]"
+                    )}
+                    aria-hidden={i >= 2}
+                  >
+                    <div className="flex items-start gap-3">
+                      <Icon
+                        className={cn("mt-0.5 size-4 shrink-0", config.color)}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={cn("text-xs font-medium", config.color)}
+                          >
+                            {config.label}
+                          </span>
+                          {issue.wcagCriteria.length > 0 && (
+                            <span className="text-xs text-muted-foreground">
+                              WCAG {issue.wcagCriteria.join(", ")}
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-1 text-sm font-medium">
+                          {issue.description}
+                        </p>
+                      </div>
+                      <Lock className="size-4 shrink-0 text-muted-foreground" />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+
+            {/* Gradient overlay for blur effect */}
+            {displayRemainingIssues.length > 2 && (
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-background to-transparent" />
+            )}
+          </div>
+
+          {/* Unlock CTA */}
+          <div className="mt-6 rounded-xl border border-primary/20 bg-primary/5 p-6 text-center">
+            <Lock className="mx-auto size-8 text-primary" />
+            <h3 className="mt-3 text-lg font-semibold">
+              Bekijk alle {displayBlurredCount} problemen met uitleg en oplossingen
+            </h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Maak een gratis account aan om alle issues te bekijken, inclusief
+              uitleg waarom ze belangrijk zijn en hoe je ze kunt oplossen.
+            </p>
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-center">
+              <Button asChild>
+                <a href="/auth/register?from=scan">
+                  Gratis account aanmaken
+                  <ArrowRight className="ml-1 size-4" />
+                </a>
+              </Button>
+              <Button variant="outline" asChild>
+                <a href="/pricing?from=scan">
+                  Bekijk plannen
+                </a>
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -519,6 +630,19 @@ export function ShareableScanResult({
         </div>
       )}
 
+      {/* Estimated pages nudge */}
+      {estimatedPages && estimatedPages > 1 && (
+        <div className="rounded-xl border border-border/50 bg-muted/30 p-5 text-center">
+          <p className="text-sm text-muted-foreground">
+            Deze scan controleerde <strong>1 pagina</strong>. Je website heeft waarschijnlijk{" "}
+            <strong>{estimatedPages}+ pagina&apos;s</strong> met problemen.{" "}
+            <a href="/pricing" className="font-medium text-primary hover:underline">
+              Upgrade om je hele website te scannen.
+            </a>
+          </p>
+        </div>
+      )}
+
       {/* Share + CTA */}
       <div className="space-y-4 rounded-xl border border-border/50 bg-card/50 p-6">
         {/* Share buttons */}
@@ -539,12 +663,12 @@ export function ShareableScanResult({
             {copied ? (
               <>
                 <Check className="size-4" />
-                Link gekopieerd!
+                {nl.scan.linkCopied}
               </>
             ) : (
               <>
                 <Copy className="size-4" />
-                Kopieer link
+                {nl.scan.copyLink}
               </>
             )}
           </Button>
@@ -557,7 +681,7 @@ export function ShareableScanResult({
           </p>
           <div className="mt-3 flex justify-center">
             <Button asChild>
-              <a href="/auth/register">
+              <a href="/auth/register?from=scan">
                 Gratis account aanmaken
                 <ArrowRight className="ml-1 size-4" />
               </a>

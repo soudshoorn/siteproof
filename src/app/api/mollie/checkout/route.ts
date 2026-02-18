@@ -5,6 +5,7 @@ import { PLANS, type PlanKey } from "@/lib/mollie/plans";
 import { formatMollieAmount } from "@/lib/mollie/webhooks";
 import { authenticateRequest, jsonSuccess, jsonError } from "@/lib/api/helpers";
 import { prisma } from "@/lib/db";
+import { trackEvent } from "@/lib/analytics";
 
 const checkoutSchema = z.object({
   planType: z.enum(["STARTER", "PROFESSIONAL", "BUREAU"]),
@@ -100,6 +101,12 @@ export async function POST(request: Request) {
     if (!checkoutUrl) {
       return jsonError("Kon geen checkout URL aanmaken. Probeer het opnieuw.", 500);
     }
+
+    await trackEvent("checkout_started", {
+      planType,
+      interval,
+      organizationId: organization.id,
+    }, user.id);
 
     return jsonSuccess({ checkoutUrl }, 201);
   } catch (error) {

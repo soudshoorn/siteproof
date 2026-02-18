@@ -15,6 +15,16 @@ import {
   ArrowRight,
 } from "lucide-react";
 
+interface EventFunnel {
+  scansStarted: number;
+  scansCompleted: number;
+  signupsFromScan: number;
+  upgradeClicked: number;
+  checkoutStarted: number;
+  checkoutCompleted: number;
+  scanLimitHit: number;
+}
+
 interface AnalyticsData {
   quickScansByDay: Array<{ date: string; count: number }>;
   signupsByDay: Array<{ date: string; count: number }>;
@@ -24,6 +34,7 @@ interface AnalyticsData {
     paidConversions: number;
     conversionRate: string;
   };
+  eventFunnel?: EventFunnel;
   cancelledOrgs: number;
   topPosts: Array<{
     id: string;
@@ -130,6 +141,64 @@ export function AnalyticsDashboard() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Detailed event funnel */}
+      {data.eventFunnel && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <BarChart3 className="size-4" />
+              Gedetailleerde conversie funnel ({days} dagen)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {[
+                { label: "Quick scans gestart", value: data.eventFunnel.scansStarted, color: "bg-blue-500" },
+                { label: "Quick scans voltooid", value: data.eventFunnel.scansCompleted, color: "bg-blue-400" },
+                { label: "Registraties na scan", value: data.eventFunnel.signupsFromScan, color: "bg-green-500" },
+                { label: "Upgrade clicks", value: data.eventFunnel.upgradeClicked, color: "bg-yellow-500" },
+                { label: "Checkout gestart", value: data.eventFunnel.checkoutStarted, color: "bg-orange-500" },
+                { label: "Betaling voltooid", value: data.eventFunnel.checkoutCompleted, color: "bg-primary" },
+              ].map((step, i, arr) => {
+                const maxValue = Math.max(...arr.map((s) => s.value), 1);
+                const pct = maxValue > 0 ? (step.value / maxValue) * 100 : 0;
+                const prevValue = i > 0 ? arr[i - 1].value : null;
+                const convRate = prevValue && prevValue > 0
+                  ? ((step.value / prevValue) * 100).toFixed(1)
+                  : null;
+
+                return (
+                  <div key={step.label} className="flex items-center gap-3">
+                    <div className="w-40 shrink-0 text-sm">
+                      {step.label}
+                    </div>
+                    <div className="flex-1 h-6 rounded bg-muted overflow-hidden">
+                      <div
+                        className={`h-full rounded ${step.color} transition-all`}
+                        style={{ width: `${Math.max(pct, 2)}%` }}
+                      />
+                    </div>
+                    <div className="w-12 text-right text-sm font-bold">
+                      {step.value}
+                    </div>
+                    {convRate && (
+                      <div className="w-16 text-right text-xs text-muted-foreground">
+                        {convRate}%
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {data.eventFunnel.scanLimitHit > 0 && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {data.eventFunnel.scanLimitHit}x scan limiet bereikt (potentiele upgrades)
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Period stats */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

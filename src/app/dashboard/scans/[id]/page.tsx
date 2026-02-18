@@ -92,5 +92,7 @@ export default async function ScanResultsPage({ params }: PageProps) {
     };
   }
 
-  return <ScanResultsView scan={scan} eaaData={eaaData} />;
+  const planType = (organization?.planType ?? "FREE") as "FREE" | "STARTER" | "PROFESSIONAL" | "BUREAU";
+
+  return <ScanResultsView scan={scan} eaaData={eaaData} planType={planType} />;
 }

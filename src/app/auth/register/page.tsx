@@ -28,6 +28,7 @@ const planLabels: Record<string, string> = {
 function RegisterForm() {
   const searchParams = useSearchParams();
   const plan = searchParams.get("plan");
+  const from = searchParams.get("from");
   const planLabel = plan ? planLabels[plan] : null;
 
   const [state, formAction, isPending] = useActionState<AuthResult | null, FormData>(
@@ -50,6 +51,7 @@ function RegisterForm() {
       <CardContent>
         <form action={formAction} className="space-y-4">
           {plan && <input type="hidden" name="plan" value={plan} />}
+          {from && <input type="hidden" name="from" value={from} />}
           {state?.error && (
             <div
               className="flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive"

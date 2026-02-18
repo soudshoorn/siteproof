@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { prisma } from "@/lib/db";
 import { sendWelcomeEmail } from "@/lib/email/notifications";
+import { trackEvent } from "@/lib/analytics";
 
 /**
  * Auth callback handler.
@@ -97,6 +98,12 @@ export async function GET(request: NextRequest) {
       sendWelcomeEmail(supabaseUser.email!, fullName || "").catch((err) =>
         console.error("[Auth] Failed to send welcome email:", err)
       );
+
+      // Track signup_from_scan if user came from scan result
+      const from = searchParams.get("from");
+      if (from === "scan") {
+        trackEvent("signup_from_scan", { userId: user.id }).catch(() => {});
+      }
     }
   } catch (err) {
     console.error("[Auth] Failed to sync user to database:", err);

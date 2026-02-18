@@ -7,6 +7,7 @@ import {
   handleCancellation,
 } from "@/lib/mollie/webhooks";
 import type { PlanKey } from "@/lib/mollie/plans";
+import { trackEvent } from "@/lib/analytics";
 
 interface PaymentMetadata {
   organizationId: string;
@@ -103,6 +104,11 @@ export async function POST(request: Request) {
           await createSubscription({
             customerId: payment.customerId as string,
             metadata,
+          });
+          await trackEvent("checkout_completed", {
+            planType: metadata.planType,
+            interval: metadata.interval,
+            organizationId: metadata.organizationId,
           });
         } else {
           // Recurring payment successful → extend period
